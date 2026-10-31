@@ -1008,16 +1008,16 @@ const OCR=(()=>{
      So: crop → upscale → split light/dark (global Otsu and a local-contrast threshold, both text colours)
      → drop anything touching the box edge, bars/lines and specks → keep the main text line by glyph height
      → black glyphs on white. Every variant is read and the most believable result wins (see pickBest). */
-  function grabCrop(r,smooth=true){
+  function grabCrop(r,smooth=true,force=0){
     const vw=video.videoWidth,vh=video.videoHeight;if(!vw||!r)return null;
     const sx=Math.max(0,Math.round(r.x*vw)),sy=Math.max(0,Math.round(r.y*vh)),sw=Math.max(4,Math.round(r.w*vw)),sh=Math.max(4,Math.round(r.h*vh));
-    const scale=Math.max(3,Math.min(8,Math.round(96/sh))),W=sw*scale,H=sh*scale;
+    const scale=force||Math.max(3,Math.min(8,Math.round(96/sh))),W=sw*scale,H=sh*scale;
     const c=document.createElement('canvas');c.width=W;c.height=H;const g=c.getContext('2d',{willReadFrequently:true});
     g.imageSmoothingEnabled=smooth;g.imageSmoothingQuality='high';g.drawImage(video,sx,sy,sw,sh,0,0,W,H);   // smooth suits anti-aliased text, nearest suits bitmap fonts
-    const d=g.getImageData(0,0,W,H).data,n=W*H,L=new Float32Array(n);
-    for(let i=0;i<n;i++)L[i]=.299*d[i*4]+.587*d[i*4+1]+.114*d[i*4+2];
+    const d=g.getImageData(0,0,W,H).data,n=W*H,L=new Float32Array(n),S=new Float32Array(n);
+    for(let i=0;i<n;i++){const R=d[i*4],G=d[i*4+1],B=d[i*4+2],mx=Math.max(R,G,B),mn=Math.min(R,G,B);L[i]=.299*R+.587*G+.114*B;S[i]=mx>40?(mx-mn)/mx:0;}
     const ev=document.createElement('canvas');ev.width=sw;ev.height=sh;ev.getContext('2d').drawImage(video,sx,sy,sw,sh,0,0,sw,sh);
-    return {L,W,H,scale,raw:ev};
+    return {L,S,W,H,scale,raw:ev};
   }
   function otsu(L){const hist=new Array(256).fill(0);for(const v of L)hist[v|0]++;const n=L.length;let sum=0;for(let i=0;i<256;i++)sum+=i*hist[i];
     let sB=0,wB=0,best=-1,th=128;for(let t=0;t<256;t++){wB+=hist[t];if(!wB)continue;const wF=n-wB;if(!wF)break;sB+=t*hist[t];const mB=sB/wB,mF=(sum-sB)/wF,v=wB*wF*(mB-mF)**2;if(v>best){best=v;th=t;}}return th;}
@@ -1025,17 +1025,17 @@ const OCR=(()=>{
     const I=new Float64Array((W+1)*(H+1));for(let y=0;y<H;y++){let row=0;for(let x=0;x<W;x++){row+=L[y*W+x];I[(y+1)*(W+1)+x+1]=I[y*(W+1)+x+1]+row;}}
     const M=new Float32Array(W*H);for(let y=0;y<H;y++){const y0=Math.max(0,y-rad),y1=Math.min(H,y+rad+1);for(let x=0;x<W;x++){const x0=Math.max(0,x-rad),x1=Math.min(W,x+rad+1);
       M[y*W+x]=(I[y1*(W+1)+x1]-I[y0*(W+1)+x1]-I[y1*(W+1)+x0]+I[y0*(W+1)+x0])/((y1-y0)*(x1-x0));}}return M;}
-  function cleanMask(mask,W,H,scale){
+  function cleanMask(mask,W,H,scale,S){
     const n=W*H,lab=new Int32Array(n),comps=[null],stack=[];
-    for(let i=0;i<n;i++){if(!mask[i]||lab[i])continue;const id=comps.length;let x0=1e9,x1=-1,y0=1e9,y1=-1,area=0;stack.push(i);lab[i]=id;
-      while(stack.length){const k=stack.pop();area++;const y=(k/W)|0,x=k-y*W;if(x<x0)x0=x;if(x>x1)x1=x;if(y<y0)y0=y;if(y>y1)y1=y;
+    for(let i=0;i<n;i++){if(!mask[i]||lab[i])continue;const id=comps.length;let x0=1e9,x1=-1,y0=1e9,y1=-1,area=0,sat=0;stack.push(i);lab[i]=id;
+      while(stack.length){const k=stack.pop();area++;if(S)sat+=S[k];const y=(k/W)|0,x=k-y*W;if(x<x0)x0=x;if(x>x1)x1=x;if(y<y0)y0=y;if(y>y1)y1=y;
         if(x>0&&mask[k-1]&&!lab[k-1]){lab[k-1]=id;stack.push(k-1);}if(x<W-1&&mask[k+1]&&!lab[k+1]){lab[k+1]=id;stack.push(k+1);}
         if(k>=W&&mask[k-W]&&!lab[k-W]){lab[k-W]=id;stack.push(k-W);}if(k+W<n&&mask[k+W]&&!lab[k+W]){lab[k+W]=id;stack.push(k+W);}}
       const w=x1-x0+1,h=y1-y0+1;
       const drop=x0===0||y0===0||x1===W-1||y1===H-1   // touches the box edge: frame, panel, half-cut icon
         ||area<scale*scale*2||h<scale*3            // specks, commas, dots
         ||h>H*0.8||w>h*3.2||area>w*h*0.85&&w>h*1.5; // gauge bars, borders, filled blocks
-      comps.push({x0,x1,y0,y1,w,h,area,drop});}
+      comps.push({x0,x1,y0,y1,w,h,area,drop,sat:sat/area});}
     let live=comps.filter(c=>c&&!c.drop);if(!live.length)return null;
     // main text height: the height that most glyphs share
     let modeH=live[0].h,bestN=0;for(const c of live){const k=live.filter(o=>o.h>=c.h*0.8&&o.h<=c.h*1.25).length;if(k>bestN||(k===bestN&&c.h>modeH)){bestN=k;modeH=c.h;}}
@@ -1056,20 +1056,33 @@ const OCR=(()=>{
       for(let y=by0;y<=by1;y++)for(let x=bx0;x<=bx1;x++){if(keep[lab[y*W+x]]){const o=((y-by0+pad)*ow+(x-bx0+pad))*4;img.data[o]=img.data[o+1]=img.data[o+2]=0;}}
       og.putImageData(img,0,0);return out;};
     // "[" / "(" before the percentage: a narrow glyph taller than the digits
-    const br=live.findIndex((c,i)=>i>=2&&c.w<=c.h*0.5&&c.h>=modeH*1.05);
+    // In MapleStory Classic the brackets around the % are coloured (green) while the digits are white,
+    // so a strongly coloured glyph is the most reliable split point; a narrow tall glyph is the fallback.
+    const isAccent=c=>c.sat>0.35,isTallNarrow=c=>c.w<=c.h*0.5&&c.h>=modeH*1.05;
+    const neutral=live.filter(c=>!isAccent(c)).length;
+    const isBr=neutral>=2&&live.some(isAccent)?isAccent:isTallNarrow;
+    const br=live.findIndex((c,i)=>i>=2&&isBr(c));
     let num=null,pct=null;
     if(br>0){const b=live[br];num=paint(live.slice(0,br));
-      const rest=live.slice(br+1).filter(c=>!(c.w<=c.h*0.5&&c.h>=modeH*1.05));          // drop the closing bracket
-      pct=paint([...rest,...dots.filter(d=>d.x0>b.x1)]);}
+      const after=live.slice(br+1),close=after.findIndex(isBr);
+      const rest=close>=0?after.slice(0,close):after;                                      // stop at the closing bracket
+      const xEnd=close>=0?after[close].x0:1e9;
+      pct=paint([...rest,...dots.filter(d=>d.x0>b.x1&&d.x1<xEnd)]);}
     return {canvas:paint(live),num,pct,count:live.length,modeH};
   }
   function variants(r){
     const out=[];let raw=null;
+    // pass 1: find how tall the digits are, then upscale so they are ~44px — Tesseract's sweet spot
+    let fit=0;{const cr=grabCrop(r,true);if(!cr)return null;const {L,W,H,scale,S}=cr,th=otsu(L);let best=null;
+      for(const bright of [true,false]){const m=new Uint8Array(W*H);for(let i=0;i<W*H;i++)m[i]=(L[i]>th)===bright?1:0;const v=cleanMask(m,W,H,scale,S);if(v&&(!best||v.count>best.count))best=v;}
+      if(best)fit=Math.max(2,Math.min(12,Math.round(scale*44/best.modeH)));}
     for(const smooth of [true,false]){
-      const cr=grabCrop(r,smooth);if(!cr)return null;raw=cr.raw;const {L,W,H,scale}=cr,n=W*H;
+      const cr=grabCrop(r,smooth,fit);if(!cr)return null;raw=cr.raw;const {L,W,H,scale}=cr,n=W*H;
       const th=otsu(L),M=localMean(L,W,H,Math.round(H*0.6)),part=[];
-      const mk=(tag,f)=>{const m=new Uint8Array(n);for(let i=0;i<n;i++)m[i]=f(i)?1:0;const v=cleanMask(m,W,H,scale);if(v&&v.count>=1&&v.count<=28)part.push({...v,tag:(smooth?'':'px-')+tag});};
+      const mk=(tag,f)=>{const m=new Uint8Array(n);for(let i=0;i<n;i++)m[i]=f(i)?1:0;const v=cleanMask(m,W,H,scale,cr.S);if(v&&v.count>=1&&v.count<=28)part.push({...v,tag:(smooth?'':'px-')+tag});};
       mk('light',i=>L[i]>th);mk('dark',i=>L[i]<=th);
+      // stricter cut: separates glyphs that blur together in a low-resolution capture
+      {const hi=th+(255-th)*0.4,lo=th*0.6;mk('light-strict',i=>L[i]>hi);mk('dark-strict',i=>L[i]<lo);}
       mk('light-local',i=>L[i]>M[i]+18);mk('dark-local',i=>L[i]<M[i]-18);
       part.sort((a,b)=>b.count-a.count);out.push(...part);}
     // try the most promising first: the best smooth and the best pixel variant, then the rest
@@ -1092,7 +1105,9 @@ const OCR=(()=>{
         if(val&&val.pct==null){const f=parseExp(text);if(f?.pct!=null)val.pct=f.pct;}}
       else{text=(await w.recognize(v.canvas)).data.text.trim();val=kind==='exp'?parseExp(text):parseMeso(text);}
       res.push({v,text,val});
-      if(res.length>=2&&agreeCount(res,kind,val)>=2)break;}       // two variants agree → good enough
+      // two variants agree on a believable value → good enough (an EXP read must include the %, a Meso read at least 3 digits)
+      const solid=kind==='exp'?val?.pct!=null:val!=null&&(String(val).length>=3||st.meso!=null&&Math.abs(val-st.meso)<1000);
+      if(solid&&res.length>=2&&agreeCount(res,kind,val)>=2)break;}
     return {best:pickBest(res,kind),raw:V.raw,tries:res.length};
   }
   const same=(kind,a,b)=>a!=null&&b!=null&&(kind==='exp'?a.exp===b.exp&&a.pct===b.pct:a===b);
