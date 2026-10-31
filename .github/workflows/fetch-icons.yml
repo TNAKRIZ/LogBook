@@ -33,13 +33,45 @@ jobs:
           done
           echo "downloaded=$ok missing=$miss"
           file assets/icons/* | head -5
-      - name: Probe item data endpoints (temporary)
+      - name: Item data from MeowDB (shop list + item summaries)
         run: |
-          curl -fsSL -A "LogBook-icon-fetch" -o assets/_probe/item-294.html "https://meowdb.com/msclassic/item-db/294" || true
-          grep -oE '"/[^"]*api[^"]*"|https://meowdb.com/[^"]*api[^"]*' assets/_probe/item-294.html | sort -u > assets/_probe/api-paths.txt || true
-          grep -oE '/_next/static/[^"]+\.js' assets/_probe/item-294.html | sort -u | head -40 > assets/_probe/js.txt || true
-          for js in $(head -40 assets/_probe/js.txt); do curl -fsSL "https://meowdb.com$js" | grep -oE '"/?msclassic/api/[^"]*"|`/?msclassic/api/[^`]*`|/api/[a-zA-Z0-9_/-]+' ; done | sort -u > assets/_probe/js-api.txt || true
-          wc -l assets/_probe/*
+          mkdir -p assets/meowdb
+          UA="LogBook-data-fetch (github.com/TNAKRIZ/LogBook)"
+          curl -fsSL -A "$UA" -o /tmp/shops.html "https://meowdb.com/msclassic/npc-shops" || true
+          # gameId -> meowdb item page id, from the shop page links
+          python3 - <<'PY'
+          import re, json, os
+          s = open('/tmp/shops.html', encoding='utf-8', errors='ignore').read() if os.path.exists('/tmp/shops.html') else ''
+          pairs = {}
+          for m in re.finditer(r'/msclassic/item-db/(\d+)', s):
+              seg = s[max(0, m.start()-1500): m.start()+1500]
+              ic = re.findall(r'/api/assets/icons/(\d+)', seg)
+              if ic:
+                  # nearest icon to the link
+                  best = min(re.finditer(r'/api/assets/icons/(\d+)', seg), key=lambda x: abs(x.start()-1500))
+                  pairs.setdefault(best.group(1), m.group(1))
+          json.dump(pairs, open('assets/meowdb/shop-item-pages.json', 'w'), indent=1, sort_keys=True)
+          print(len(pairs), 'items linked from shop page')
+          PY
+          cp /tmp/shops.html assets/meowdb/npc-shops.html 2>/dev/null || true
+          # one-line summaries ("Where to get ... Level Required ..., Weapon Attack +15.") per item page
+          python3 - <<'PY'
+          import json, re, subprocess, time, html
+          pairs = json.load(open('assets/meowdb/shop-item-pages.json'))
+          ids = [l.strip() for l in open('assets/icon-ids.txt') if l.strip().isdigit()]
+          out = {}
+          for gid in ids:
+              mid = pairs.get(gid)
+              if not mid: continue
+              r = subprocess.run(['curl', '-fsSL', '-A', 'LogBook-data-fetch', f'https://meowdb.com/msclassic/item-db/{mid}'], capture_output=True, text=True)
+              m = re.search(r'<meta name="description" content="([^"]*)"', r.stdout)
+              t = re.search(r'<title>([^<]*)</title>', r.stdout)
+              out[gid] = {'page': mid, 'title': html.unescape(t.group(1)) if t else '', 'desc': html.unescape(m.group(1)) if m else ''}
+              time.sleep(0.3)
+          json.dump(out, open('assets/meowdb/item-summaries.json', 'w'), indent=1, ensure_ascii=False, sort_keys=True)
+          print(len(out), 'summaries')
+          PY
+          rm -rf assets/_probe
       - name: Commit
         run: |
           git config user.name "github-actions[bot]"
