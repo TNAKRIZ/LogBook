@@ -1,10 +1,15 @@
 # Builds LogBook Desktop on real Windows and Mac machines.
-# Run it from the Actions tab ("Run workflow"), or push a tag like desktop-v1.0.1 to publish a Release with the zips.
+# Runs by itself whenever the web page or the desktop code changes on main (or by hand from the Actions tab),
+# and puts the newest Windows / Mac zips on the Releases page under "LogBook Desktop (ล่าสุด)".
 name: Build LogBook Desktop
 on:
   workflow_dispatch:
   push:
-    tags: ['desktop-v*']
+    branches: [main]
+    paths: ['index.html', 'desktop/**', '.github/workflows/desktop.yml']
+concurrency:
+  group: desktop-build
+  cancel-in-progress: true
 permissions:
   contents: write
 jobs:
@@ -45,6 +50,16 @@ jobs:
           name: ${{ matrix.zip }}
           path: desktop/${{ matrix.zip }}
       - uses: softprops/action-gh-release@v2
-        if: startsWith(github.ref, 'refs/tags/')
         with:
+          tag_name: desktop-latest
+          target_commitish: ${{ github.sha }}
+          name: LogBook Desktop (ล่าสุด)
+          body: |
+            โปรแกรม LogBook Desktop รุ่นล่าสุด — สร้างอัตโนมัติจาก commit ${{ github.sha }}
+            • Windows: LogBook-Desktop-Windows.zip
+            • Mac ชิป M1/M2/M3/M4: LogBook-Desktop-Mac-AppleSilicon.zip
+            • Mac Intel: LogBook-Desktop-Mac-Intel.zip
+            วิธีเปิดครั้งแรกอยู่ในไฟล์ README-อ่านก่อน.txt ใน zip
+          make_latest: true
+          overwrite_files: true
           files: desktop/${{ matrix.zip }}
