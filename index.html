@@ -171,6 +171,7 @@ video{width:100%;background:#000;border-radius:10px;aspect-ratio:16/9;object-fit
 .lg{display:inline-flex;align-items:center;gap:5px}.lg img{height:24px;border:1px solid var(--line);border-radius:4px;background:#fff;image-rendering:pixelated;max-width:220px;object-fit:contain}
 .lg .arr{color:var(--muted)}.lg .v{font-weight:700}.lg.ok{color:var(--good)}.lg.no{color:var(--bad)}.lg.wait{color:var(--muted)}
 .ocrzoom[hidden]{display:none}
+.detnote:empty{display:none}.detnote{margin:8px 0;padding:8px 12px;border-radius:10px;border:1px dashed var(--line);background:var(--bg);font-size:13px}.detnote b{color:var(--ink)}
 .ocrzoom{display:flex;flex-direction:column;gap:2px;margin-top:6px}.ocrzoom canvas{max-width:100%;border:2px solid #f5c542;border-radius:6px;image-rendering:pixelated;background:#000;align-self:flex-start}
 .ocrconf{border:2px solid var(--line);border-radius:12px;padding:10px 12px;margin:10px 0;background:var(--bg);display:grid;gap:8px}
 .ocrconf .r{display:flex;align-items:center;gap:10px;flex-wrap:wrap}.ocrconf .r .k{width:70px;color:var(--muted);font-weight:700;font-size:12.5px}
@@ -273,6 +274,8 @@ footer a{color:inherit}
           <b>⚡ อ่านตัวเลขจากจอแบบเรียลไทม์</b>
           <button class="btn ghost sm" id="ocrExpBox" type="button">🎯 ตั้งกรอบ EXP</button>
           <button class="btn ghost sm" id="ocrMesoBox" type="button">🎯 ตั้งกรอบ Meso</button>
+          <button class="btn ghost sm" id="ocrWhoBox" type="button" title="กรอบเดียวคลุม LV + อาชีพ + ชื่อตัวละคร ที่แถบล่างซ้าย">🎯 กรอบ เลเวล/ชื่อ</button>
+          <button class="btn ghost sm" id="ocrMapBox" type="button" title="ชื่อแมพบนแผนที่มุมซ้ายบน">🎯 กรอบ ชื่อแมพ</button>
           <label class="row small" style="margin:0;color:var(--ink)"><input type="checkbox" id="ocrOn"> เปิดอ่าน ทุก</label><select id="ocrInt" style="width:auto" title="อ่านถี่ = ตัวเลขสดกว่า แต่กินเครื่องมากกว่า"><option value="5">5 วิ</option><option value="15">15 วิ</option><option value="30">30 วิ</option></select>
           <button class="btn sm" id="pipBtn" type="button" title="หน้าต่างเล็กลอยทับเกม ดูสถิติได้โดยไม่ต้องสลับจอ">🪟 หน้าต่างลอย</button>
         </div>
@@ -289,10 +292,31 @@ footer a{color:inherit}
     <h2>▶️ เริ่มบันทึกการผจญภัย</h2>
     <ol class="wsteps" id="sw_steps"></ol>
     <div class="wbody">
+      <div class="wstep" data-k="screen">
+        <h3 class="wt">1 · แชร์หน้าจอเกม <span class="opt">ข้ามได้</span></h3>
+        <p class="muted small">กด "เริ่มแชร์หน้าจอ" แล้วเลือกหน้าต่างเกม MapleStory · แชร์ไว้แล้วระบบจะอ่านชื่อ เลเวล แมพ EXP และเงินให้เอง ถ่ายภาพตอนเริ่ม จุดเช็ก และจบรอบให้ด้วย · ถ้าไม่แชร์ก็กด Next ข้ามไปกรอกเองได้</p>
+        <div class="whost" data-host="screen"></div>
+      </div>
+
+      <div class="wstep" data-k="ocr">
+        <h3 class="wt">2 · ตั้งกรอบให้ระบบอ่านจากจอ <span class="opt">ข้ามได้</span></h3>
+        <ol class="howto small">
+          <li>กด <b>🎯 ตั้งกรอบ EXP</b> แล้วลากคลุมตัวเลข EXP บนแถบ EXP ในภาพ</li>
+          <li>เปิดหน้าต่างกระเป๋าในเกมค้างไว้ แล้วกด <b>🎯 ตั้งกรอบ Meso</b> ลากคลุมตัวเลขเงิน</li>
+          <li><b>🎯 กรอบ เลเวล/ชื่อ</b> ลากกรอบเดียวคลุม LV + อาชีพ + ชื่อตัวละคร ที่แถบล่างซ้าย — ระบบจะเลือกตัวละครให้เอง</li>
+          <li><b>🎯 กรอบ ชื่อแมพ</b> ลากคลุมชื่อแมพบนแผนที่มุมซ้ายบน (เปิดแผนที่ไว้) — ระบบจะเลือกแมพให้เอง</li>
+          <li>ติ๊ก <b>เปิดอ่าน</b> — ตัวเลขจะเติมในขั้นต่อไปให้เอง (กรอบทั้งหมดจำไว้ใช้ครั้งหน้า)</li>
+        </ol>
+        <p class="muted small" id="ocrNeedShare" style="display:none">⚠️ ยังไม่ได้แชร์หน้าจอ — ย้อนกลับไปขั้น 1 ก่อน หรือกด Next ข้ามไปกรอกเอง</p>
+        <div class="whost" data-host="screen"></div>
+        <div class="whost" data-host="ocr"></div>
+      </div>
+
       <div class="wstep" data-k="char">
-        <h3 class="wt">1 · เลือกตัวละคร</h3>
+        <h3 class="wt">3 · เลือกตัวละคร</h3>
         <p class="muted small">เลือกตัวละครที่จะออกฟาร์ม หรือสร้างใหม่ (ครั้งต่อไปจะจำไว้ให้)</p>
         <select id="s_char" hidden></select>
+        <div class="detnote" id="whoNote"></div>
         <div class="charcards" id="charCards"></div>
         <div class="box" id="s_newCharBox" style="display:none;margin-top:12px">
           <h4>➕ สร้างตัวละครใหม่</h4>
@@ -317,35 +341,18 @@ footer a{color:inherit}
       </div>
 
       <div class="wstep" data-k="map">
-        <h3 class="wt">2 · แมพที่จะฟาร์ม</h3>
+        <h3 class="wt">4 · แมพที่จะฟาร์ม</h3>
         <div class="fields">
           <div style="grid-column:span 2;position:relative"><label>แมพ — พิมพ์ชื่อแมพหรือมอน เช่น "tomb 3", "curse eye"</label><input id="s_mapq" autocomplete="off" placeholder="🔎 ค้นหาแมพ…"><input type="hidden" id="s_map"><div id="s_mapList" class="mplist" hidden></div></div>
           <div><label>คนในปาร์ตี้ (รวมตัวเอง)</label><input id="s_party" type="number" min="1" max="6" value="1"></div>
         </div>
+        <div class="detnote" id="mapNote"></div>
         <div id="s_mapInfo"></div>
         <div class="fields" id="s_newMapBox" style="display:none;margin-top:10px">
           <div style="grid-column:span 2"><label>ชื่อแมพใหม่ (ภาษาอังกฤษตามเกม)</label><input id="s_newMapName" placeholder="เช่น Excavation Site I"></div>
           <div><label>พื้นที่</label><input id="s_newMapArea" placeholder="เช่น Perion"></div>
           <div><label>รหัสแมพ (ถ้ารู้)</label><input id="s_newMapId" inputmode="numeric" placeholder="เช่น 010004136"></div>
         </div>
-      </div>
-
-      <div class="wstep" data-k="screen">
-        <h3 class="wt">3 · แชร์หน้าจอเกม <span class="opt">ข้ามได้</span></h3>
-        <p class="muted small">กด "เริ่มแชร์หน้าจอ" แล้วเลือกหน้าต่างเกม MapleStory · ระบบจะถ่ายภาพตอนเริ่ม จุดเช็ก และจบรอบให้เอง · ถ้าไม่แชร์ก็กด Next ข้ามไปกรอกเองได้</p>
-        <div class="whost" data-host="screen"></div>
-      </div>
-
-      <div class="wstep" data-k="ocr">
-        <h3 class="wt">4 · ให้ระบบอ่านตัวเลข EXP / Meso <span class="opt">ข้ามได้</span></h3>
-        <ol class="howto small">
-          <li>กด <b>🎯 ตั้งกรอบ EXP</b> แล้วลากคลุมตัวเลข EXP บนแถบ EXP ในภาพ</li>
-          <li>เปิดหน้าต่างกระเป๋าในเกมค้างไว้ แล้วกด <b>🎯 ตั้งกรอบ Meso</b> ลากคลุมตัวเลขเงิน</li>
-          <li>ติ๊ก <b>เปิดอ่าน</b> — ตัวเลขจะเติมในขั้นต่อไปให้เอง (กรอบจะจำไว้ใช้ครั้งหน้า)</li>
-        </ol>
-        <p class="muted small" id="ocrNeedShare" style="display:none">⚠️ ยังไม่ได้แชร์หน้าจอ — ย้อนกลับไปขั้น 3 ก่อน หรือกด Next ข้ามไปกรอกเอง</p>
-        <div class="whost" data-host="screen"></div>
-        <div class="whost" data-host="ocr"></div>
       </div>
 
       <div class="wstep" data-k="stats">
@@ -953,9 +960,9 @@ function fillMapSelect(sel,selectedId,withNew=true){
 const OCR=(()=>{
   const CFG=Object.assign({src:'https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js'},window.LB_OCR||{});
   let worker=null,loading=null,timer=null,busy=false,drawMode=null,dragStart=null;
-  let regions={exp:null,meso:null};          // normalised {x,y,w,h} in video-frame space
+  let regions={exp:null,meso:null,who:null,map:null};          // normalised {x,y,w,h} in video-frame space
   const st={};                                // live state
-  function reset(){Object.assign(st,{expCand:null,mesoCand:null,t0:null,exp:null,pct:null,meso:null,expGained:0,mesoCollected:0,expHist:[],mesoHist:[],lastExpT:null,lastMesoT:null,errExp:0,errMeso:0,black:false,log:[],reqs:[],expWin:[],mesoWin:[],expRej:[],mesoRej:[]});}
+  function reset(){Object.assign(st,{expCand:null,mesoCand:null,t0:null,exp:null,pct:null,meso:null,expGained:0,mesoCollected:0,expHist:[],mesoHist:[],lastExpT:null,lastMesoT:null,errExp:0,errMeso:0,black:false,log:[],reqs:[],expWin:[],mesoWin:[],expRej:[],mesoRej:[],level:null,levelAtExp:null,cycle:0});}
   reset();
   const ov=()=>$('ocrOverlay');
   /* ---- region drawing ---- */
@@ -968,7 +975,7 @@ const OCR=(()=>{
     const fr=frameRect();
     const box=(r,col,label)=>{if(!r)return;const x=fr.x+r.x*fr.w,y=fr.y+r.y*fr.h,w=r.w*fr.w,h=r.h*fr.h;
       g.strokeStyle=col;g.lineWidth=2;g.strokeRect(x,y,w,h);g.fillStyle=col;g.font='bold 12px system-ui';g.fillText(label,x+2,y-4);};
-    box(regions.exp,'#3fdc6a','EXP');box(regions.meso,'#f5c542','Meso');if(tmp)box(tmp,'#ffffff','…');
+    box(regions.exp,'#3fdc6a','EXP');box(regions.meso,'#f5c542','Meso');box(regions.who,'#6fb8ff','เลเวล/ชื่อ');box(regions.map,'#ff8fd0','แมพ');if(tmp)box(tmp,'#ffffff','…');
   }
   function toNorm(ev){const r=ov().getBoundingClientRect(),fr=frameRect();
     return {x:Math.min(1,Math.max(0,(ev.clientX-r.left-fr.x)/fr.w)),y:Math.min(1,Math.max(0,(ev.clientY-r.top-fr.y)/fr.h))};}
@@ -978,7 +985,8 @@ const OCR=(()=>{
   function startDraw(kind){
     if(!stream){alert('เริ่มแชร์หน้าจอเกมก่อน แล้วค่อยตั้งกรอบนะคะ');return;}
     drawMode=kind;ov().classList.add('draw');
-    $('ocrHint').innerHTML=`ลากกรอบให้แคบ คลุมเฉพาะตัวเลข ${kind==='exp'?'<b>EXP</b> เช่น 401304 [31.44%] — ไม่รวมคำว่า EXP และตัวหลอด':'<b>Meso</b> ในหน้าต่างกระเป๋า — ไม่รวมไอคอนเหรียญและปุ่มข้าง ๆ'} · ดูภาพขยายด้านล่างระหว่างลาก`;
+    $('ocrHint').innerHTML={exp:'ลากกรอบให้แคบ คลุมเฉพาะตัวเลข <b>EXP</b> เช่น 401304 [31.44%] — ไม่รวมคำว่า EXP และตัวหลอด',meso:'ลากกรอบให้แคบ คลุมเฉพาะตัวเลข <b>Meso</b> ในหน้าต่างกระเป๋า — ไม่รวมไอคอนเหรียญและปุ่ม MESOS',
+      who:'ลากกรอบเดียวคลุม <b>LV + อาชีพ + ชื่อตัวละคร</b> ที่แถบล่างซ้าย',map:'ลากกรอบคลุม <b>ชื่อแมพ</b> บนแผนที่มุมซ้ายบน'}[kind]+' · ดูภาพขยายด้านล่างระหว่างลาก';
   }
   function bindOverlay(){
     const c=ov();
@@ -1097,6 +1105,7 @@ const OCR=(()=>{
     const all=s.match(/\d+/g);if(!all)return null;const big=all.sort((a,b)=>b.length-a.length)[0];return {exp:parseInt(big,10),pct:null};};
   const parseMeso=t=>{const groups=t.replace(/[,\.]/g,'').match(/\d+/g);if(!groups)return null;const big=groups.sort((a,b)=>b.length-a.length)[0];return parseInt(big,10);};
   async function readRegion(w,kind){
+    await useParams(w,false);
     const V=variants(regions[kind]);if(!V)return null;const res=[];
     for(const v of V.list){let text,val;
       if(kind==='exp'&&v.num&&v.pct){const a=(await w.recognize(v.num)).data.text.trim(),b=(await w.recognize(v.pct)).data.text.trim();
@@ -1123,6 +1132,66 @@ const OCR=(()=>{
       if(sc>bs){bs=sc;best=r;}}
     return best||res[0]||null;
   }
+  /* ---- reading words: the character box (LV + job + name) and the minimap title ---- */
+  const P_DIGITS={tessedit_char_whitelist:'0123456789.%[]()',tessedit_pageseg_mode:'7'};
+  const P_WORDS={tessedit_char_whitelist:"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789 .:<>-'(),/",tessedit_pageseg_mode:'6'};
+  let pMode='digits';
+  async function useParams(w,words){const k=words?'words':'digits';if(pMode!==k){await w.setParameters(words?P_WORDS:P_DIGITS);pMode=k;}}
+  function wordCanvases(r){
+    const vh=video.videoHeight;if(!vh||!r)return [];const sh=Math.max(4,Math.round(r.h*vh));
+    const cr=grabCrop(r,true,Math.max(2,Math.min(6,Math.round(160/sh))));if(!cr)return [];
+    const {L,W,H}=cr,n=W*H;let mean=0;for(const v of L)mean+=v;mean/=n;const inv=mean<128,th=otsu(L);
+    const mk=f=>{const c=document.createElement('canvas');c.width=W+24;c.height=H+24;const g=c.getContext('2d');const img=g.createImageData(W+24,H+24);img.data.fill(255);
+      for(let y=0;y<H;y++)for(let x=0;x<W;x++){const v=f(L[y*W+x]),o=((y+12)*(W+24)+x+12)*4;img.data[o]=img.data[o+1]=img.data[o+2]=v;}g.putImageData(img,0,0);return c;};
+    return [mk(v=>inv?255-v:v),mk(v=>((v>th)===inv)?0:255)];      // grey (text dark) and a hard black/white version
+  }
+  async function readWords(w,kind){const out=[];await useParams(w,true);
+    try{for(const c of wordCanvases(regions[kind]))out.push((await w.recognize(c)).data.text);}finally{await useParams(w,false);}return out;}
+  const lev=(a,b)=>{a=a.toLowerCase();b=b.toLowerCase();const d=Array.from({length:a.length+1},(_,i)=>[i]);for(let j=1;j<=b.length;j++)d[0][j]=j;
+    for(let i=1;i<=a.length;i++)for(let j=1;j<=b.length;j++)d[i][j]=Math.min(d[i-1][j]+1,d[i][j-1]+1,d[i-1][j-1]+(a[i-1]===b[j-1]?0:1));return d[a.length][b.length];};
+  const near=(a,b)=>lev(a,b)<=(b.length>=7?2:b.length>=4?1:0);
+  // what the HUD may show → our job / branch
+  const JOB_WORDS=[['Beginner',null,null],['Warrior','warrior',null],['Fighter','warrior','Fighter'],['Page','warrior','Page'],['Spearman','warrior','Spearman'],
+    ['Magician','magician',null],['Cleric','magician','Cleric'],['Wizard','magician',null],['Thief','thief',null],['Assassin','thief','Assassin'],['Bandit','thief','Bandit'],
+    ['Bowman','bowman',null],['Archer','bowman',null],['Hunter','bowman','Hunter'],['Crossbowman','bowman','Crossbowman']];
+  function parseWho(texts,known){
+    const vote=new Map(),add=(k,v)=>{if(v==null)return;const key=k+':'+v;vote.set(key,(vote.get(key)||0)+1);};
+    for(const t of texts){
+      const lv=t.match(/L\s*[VY]\s*[\.:]?\s*(\d{1,3})/i);let level=lv?+lv[1]:null;
+      if(level==null){const nums=(t.match(/\b\d{1,3}\b/g)||[]).map(Number).filter(v=>v>=1&&v<=250);if(nums.length)level=nums.sort((a,b)=>b-a)[0];}
+      if(level>=1&&level<=250)add('level',level);
+      const toks=t.split(/[^A-Za-z0-9]+/).filter(x=>x.length>=3);let jobHit=null;
+      for(const tk of toks){const j=JOB_WORDS.find(([w])=>near(tk,w));if(j){jobHit=j;break;}}
+      if(jobHit){let br=jobHit[2];if(jobHit[0]==='Wizard')br=/fire|poison|f\s*\/\s*p/i.test(t)?'F/P Wizard':/ice|light|i\s*\/\s*l/i.test(t)?'I/L Wizard':null;add('job',jobHit[1]+'|'+(br||''));}
+      for(const tk of toks){if(/^\d+$/.test(tk)||/^l?v$/i.test(tk)||JOB_WORDS.some(([w])=>near(tk,w))||tk.length>13)continue;
+        const k=known.find(c=>near(tk,c.name));add('name',k?k.name:tk);}
+    }
+    const best=k=>{let b=null,n=0;for(const [key,c] of vote)if(key.startsWith(k+':')&&c>n){n=c;b=key.slice(k.length+1);}return b;};
+    const bestName=()=>{const names=[...vote].filter(([k])=>k.startsWith('name:')).map(([k,c])=>({n:k.slice(5),c}));if(!names.length)return null;
+      const kn=names.find(x=>known.some(c=>c.name===x.n));if(kn)return kn.n;                     // a known profile always wins
+      let top=null,tc=0;for(const a of names){const grp=names.filter(b=>lev(a.n,b.n)<=2);const c=grp.reduce((s,x)=>s+x.c,0);
+        const longest=grp.sort((x,y)=>y.n.length-x.n.length)[0].n;if(c>tc||(c===tc&&longest.length>(top||'').length)){tc=c;top=longest;}}
+      return top;};
+    const lv=best('level'),jb=best('job'),nm=bestName();
+    return {level:lv?+lv:null,job:jb?jb.split('|')[0]||null:null,branch:jb?jb.split('|')[1]||null:null,name:nm,
+      char:nm?known.find(c=>c.name===nm)||null:null};
+  }
+  async function readWho(known){if(!stream||!regions.who||!video.videoWidth||isBlack())return null;const w=await ensure();
+    const texts=await readWords(w,'who');const r=parseWho(texts,known||[]);r.raw=texts.map(t=>t.replace(/\s+/g,' ').trim()).join(' | ');return r;}
+  // OCR often reads roman numerals with l / 1 / | instead of I ("Ill" → "iii", "Vili" → "viii")
+  const romanFix=x=>/^[ivxl1|]+$/i.test(x)&&/[ivx]/i.test(x)?x.toLowerCase().replace(/[l1|]/g,'i'):x;
+  function matchMap(texts,maps){
+    let best=null,bs=0,second=0;
+    for(const m of maps){const mt=m.name.toLowerCase().replace(/<[^>]*>/g,' ').split(/[^a-z0-9]+/).filter(Boolean);if(!mt.length)continue;
+      let sc=0;for(const t of texts){const tt=t.toLowerCase().split(/[^a-z0-9|]+/).map(romanFix).filter(x=>x.length>=2||/^[ivx\d]$/.test(x));if(!tt.length)continue;let hit=0;
+        for(const w of mt){if(tt.some(x=>x===w||(w.length>=4&&near(x,w))))hit++;}
+        // most of what the minimap shows must belong to this map, and the map's own words should be there too
+        sc=Math.max(sc,0.7*Math.min(1,hit/tt.length)+0.3*hit/mt.length);}
+      if(sc>bs){second=bs;bs=sc;best=m;}else if(sc>second)second=sc;}
+    return bs>=0.75&&bs-second>=0.05?best:null;
+  }
+  async function readMap(maps){if(!stream||!regions.map||!video.videoWidth||isBlack())return null;const w=await ensure();
+    const texts=await readWords(w,'map');return {map:matchMap(texts,maps||[]),raw:texts.map(t=>t.replace(/\s+/g,' ').trim()).join(' | ')};}
   /* ---- accept/reject + accumulate ----
      One misread must never poison the totals:
      • a number is only used after the median of its last 3 reads (one odd read is outvoted)
@@ -1152,10 +1221,12 @@ const OCR=(()=>{
     const v=cleanExp(raw);if(!v)return false;
     const e=smooth(st.expWin,v.exp);if(e==null)return st.exp==null?false:false;
     const pct=v.pct!=null&&v.exp===e?v.pct:(reqNow()?+(e/reqNow()*100).toFixed(2):v.pct);
-    if(st.exp==null){st.exp=e;st.pct=pct;st.t0=st.t0||t;st.lastExpT=t;st.expHist.push({t,c:0});return true;}
+    if(st.exp==null){st.exp=e;st.pct=pct;st.levelAtExp=st.level;st.t0=st.t0||t;st.lastExpT=t;st.expHist.push({t,c:0});return true;}
     const R=reqNow()||(st.pct>0?st.exp/(st.pct/100):null);
     let gain=e-st.exp;
-    if(gain<0&&st.pct!=null&&pct!=null&&st.pct>60&&pct<40&&R)gain=(R-st.exp)+e;   // level-up
+    const leveled=st.level!=null&&st.levelAtExp!=null&&st.level>st.levelAtExp;
+    if(gain<0&&R&&(leveled||(st.pct!=null&&pct!=null&&st.pct>60&&pct<40))){gain=(R-st.exp)+e;st.reqs.length=0;}   // level-up: finish the old level, start learning the new one
+    st.levelAtExp=st.level;
     const ok=gain>=0&&(!R||gain<=R*0.2);                                         // ≤20% of a level per read
     if(!ok){rebaseIfStuck(st.expRej,e,t,R?R*0.02:5000,val=>{st.exp=val;st.pct=reqNow()?+(val/reqNow()*100).toFixed(2):pct;st.lastExpT=t;});return false;}
     st.expRej.length=0;st.exp=e;st.pct=pct??st.pct;st.expGained+=gain;st.lastExpT=t;st.expHist.push({t,c:st.expGained});
@@ -1192,6 +1263,9 @@ const OCR=(()=>{
     if(busy||!stream||(!regions.exp&&!regions.meso))return;busy=true;
     try{
       const t=Date.now(),r=await readNow();st.black=r.black;
+      st.cycle=(st.cycle||0)+1;
+      if(regions.who&&!r.black&&(st.cycle%4===1)){try{const who=await readWho(typeof characters!=='undefined'?characters:[]);
+        if(who?.level&&(st.level==null||(who.level>=st.level&&who.level<=st.level+1)))st.level=who.level;}catch(e){}}
       const okE=regions.exp&&!r.black&&acceptExp(r.exp,t),okM=regions.meso&&!r.black&&acceptMeso(r.meso,t);
       if(regions.exp){if(okE)st.errExp=0;else st.errExp++;st.rawExp=r.rawExp;}
       if(regions.meso){if(okM)st.errMeso=0;else st.errMeso++;st.rawMeso=r.rawMeso;}
@@ -1228,8 +1302,9 @@ const OCR=(()=>{
   function autofill(){
     const fresh=t=>t&&Date.now()-t<Math.max(20000,intervalMs()*2.5);
     const exp=fresh(st.lastExpT)?st.exp:null,pct=fresh(st.lastExpT)?st.pct:null,meso=fresh(st.lastMesoT)?st.meso:null;
-    if(!active){fill('s_exp',exp);fill('s_pct',pct);fill('s_mesos',meso);}
-    else{fill('c_exp',exp);fill('c_pct',pct);fill('e_exp',exp);fill('e_pct',pct);fill('e_mesos',meso);}
+    const lvl=st.level;
+    if(!active){fill('s_exp',exp);fill('s_pct',pct);fill('s_mesos',meso);fill('s_level',lvl);}
+    else{fill('c_exp',exp);fill('c_pct',pct);fill('e_exp',exp);fill('e_pct',pct);fill('e_mesos',meso);fill('c_level',lvl);fill('e_level',lvl);}
   }
   function live(){
     const eMin=perMin(st.expHist),eHr=perHr(st.expGained,st.t0),mMin=perMin(st.mesoHist),mHr=perHr(st.mesoCollected,st.t0);
@@ -1245,18 +1320,18 @@ const OCR=(()=>{
   function stop(){if(timer){try{tickWin.clearInterval(timer);}catch(e){}}timer=null;}
   function setTicker(w){const was=!!timer;stop();tickWin=w||window;if(was)start();}
   async function init(){
-    regions=Object.assign({exp:null,meso:null},await getKV('ocrRegions')||{});
+    regions=Object.assign({exp:null,meso:null,who:null,map:null},await getKV('ocrRegions')||{});
     bindOverlay();
     try{const v=localStorage.getItem('logbook-ocr-int');if(v)$('ocrInt').value=v;}catch(e){}
     $('ocrInt').onchange=e=>{try{localStorage.setItem('logbook-ocr-int',e.target.value);}catch(_){}if(timer)start();};
-    $('ocrExpBox').onclick=()=>startDraw('exp');$('pipBtn').onclick=()=>PIP.open();$('ocrMesoBox').onclick=()=>startDraw('meso');
+    $('ocrExpBox').onclick=()=>startDraw('exp');$('pipBtn').onclick=()=>PIP.open();$('ocrMesoBox').onclick=()=>startDraw('meso');$('ocrWhoBox').onclick=()=>startDraw('who');$('ocrMapBox').onclick=()=>startDraw('map');
     $('ocrOn').onchange=e=>{if(e.target.checked){if(!stream){alert('เริ่มแชร์หน้าจอเกมก่อนนะคะ');e.target.checked=false;return;}if(!regions.exp&&!regions.meso){alert('ตั้งกรอบ EXP หรือ Meso ก่อนนะคะ');e.target.checked=false;return;}start();}else stop();};
     // typing by hand turns autofill off for that field
-    ['s_exp','s_pct','s_mesos','c_exp','c_pct','e_exp','e_pct','e_mesos'].forEach(id=>$(id)?.addEventListener('input',e=>{e.target.dataset.auto='0';}));
+    ['s_level','s_exp','s_pct','s_mesos','c_level','c_exp','c_pct','e_level','e_exp','e_pct','e_mesos'].forEach(id=>$(id)?.addEventListener('input',e=>{e.target.dataset.auto='0';}));
     video.addEventListener('loadedmetadata',()=>drawBoxes());
     render();
   }
-  return {init,live,setTicker,readNow,hasRegions:()=>!!(regions.exp||regions.meso),_readNow:readNow,reset:()=>{reset();render();},snapshot:()=>({expGained:st.expGained,mesoCollected:st.mesoCollected,t0:st.t0}),stop,drawBoxes,_parseExp:parseExp,_parseMeso:parseMeso,_st:st,_accExp:acceptExp,_reqNow:reqNow,_accMeso:acceptMeso};
+  return {init,live,setTicker,readNow,hasRegions:()=>!!(regions.exp||regions.meso),has:k=>!!regions[k],readWho,readMap,_readNow:readNow,reset:()=>{reset();render();},snapshot:()=>({expGained:st.expGained,mesoCollected:st.mesoCollected,t0:st.t0}),stop,drawBoxes,_parseExp:parseExp,_parseMeso:parseMeso,_st:st,_accExp:acceptExp,_reqNow:reqNow,_accMeso:acceptMeso};
 })();
 
 /* ===================== floating live window (Document Picture-in-Picture) ===================== */
@@ -1412,6 +1487,7 @@ function prefillFromChar(c){
   const l=c?.last||{};
   setStartMap(l.mapId);$('s_party').value=l.party||1;
   $('s_level').value=l.level??'';$('s_exp').value=l.exp??'';$('s_pct').value=l.pct??'';$('s_mesos').value=l.mesos??'';
+  ['s_level','s_exp','s_pct','s_mesos'].forEach(id=>$(id).dataset.auto='1');   // last session's values: the screen may replace them
   $('s_newMapBox').style.display='none';
 }
 function renderStartItems(){
@@ -1523,7 +1599,7 @@ async function cancelSession(){
 }
 function showActive(){
   $('startCard').style.display=active?'none':'';$('activeArea').style.display=active?'':'none';$('liveGrid').style.display=active?'':'none';
-  if(active)EW.reset();else SW.reset();mountBlocks();
+  if(active)EW.reset();else{whoSeen=null;mapSeen=null;$('whoNote').innerHTML='';$('mapNote').innerHTML='';SW.reset();}mountBlocks();
   clearInterval(tickTimer);if(active)tickTimer=setInterval(renderLive,30000);renderLive();
 }
 async function renderLive(){
@@ -1560,6 +1636,32 @@ async function ocrConfirm(prefix){
     box.innerHTML='<p class="good small">✔ ใส่ตัวเลขจากจอแล้ว (แก้ได้)</p>';};
 }
 $('s_ocrRead').onclick=()=>ocrConfirm('s');$('e_ocrRead').onclick=()=>ocrConfirm('e');
+
+/* ---- pick the character and the map from what is on screen ---- */
+let whoSeen=null,mapSeen=null;
+async function detectWho(){
+  const box=$('whoNote');if(!stream||!OCR.has('who')){box.innerHTML='';return;}
+  box.innerHTML='⏳ กำลังอ่านชื่อและเลเวลจากจอ…';
+  let r;try{r=await OCR.readWho(characters);}catch(e){box.innerHTML='⚠️ '+esc(e.message);return;}
+  if(!r||(!r.name&&!r.level)){box.innerHTML=`⚠️ อ่านชื่อจากจอไม่ได้ — เลือกตัวละครเองได้เลย${r?.raw?` <span class="muted small">(อ่านได้: ${esc(r.raw)})</span>`:''}`;return;}
+  whoSeen=r;const bits=[r.name&&`<b>${esc(r.name)}</b>`,r.branch||(r.job&&jobOf(r.job)?.name),r.level&&`Lv.${r.level}`].filter(Boolean).join(' · ');
+  if(r.char){$('s_char').value=r.char.id;onCharChange();
+    if(r.branch&&!r.char.branch&&jobOf(r.char.job)?.branches.includes(r.branch)){r.char.branch=r.branch;await saveChars();renderCharCards();}
+    box.innerHTML=`🔎 อ่านจากจอ: ${bits} — <b>เลือกให้แล้ว ✓</b> <span class="muted small">(ไม่ใช่? กดการ์ดตัวอื่นได้เลย)</span>`;}
+  else if(r.name){$('s_char').value='__new';onCharChange();$('nc_name').value=r.name;
+    if(r.job){const q=document.querySelector(`input[name=nc_job][value=${r.job}]`);if(q){q.checked=true;q.dispatchEvent(new Event('change',{bubbles:true}));}}
+    if(r.branch&&[...$('nc_branch').options].some(o=>o.value===r.branch))$('nc_branch').value=r.branch;
+    box.innerHTML=`🔎 อ่านจากจอ: ${bits} — ยังไม่มีในโปรไฟล์ <b>เติมช่องสร้างตัวละครใหม่ให้แล้ว</b> ตรวจชื่อแล้วกด Next ได้เลย`;}
+  else box.innerHTML=`🔎 อ่านจากจอ: ${bits} — อ่านชื่อไม่ชัด เลือกตัวละครเองนะคะ`;
+  if(r.level){const L=$('s_level');if(L.value===''||L.dataset.auto==='1'){L.value=r.level;L.dataset.auto='1';}}
+}
+async function detectMap(){
+  const box=$('mapNote');if(!stream||!OCR.has('map')){box.innerHTML='';return;}
+  box.innerHTML='⏳ กำลังอ่านชื่อแมพจากจอ…';
+  let r;try{r=await OCR.readMap(allMaps());}catch(e){box.innerHTML='⚠️ '+esc(e.message);return;}
+  if(r?.map){mapSeen=r.map;setStartMap(r.map.id);box.innerHTML=`🔎 อ่านจากจอ: <b>${esc(r.map.name)}</b> — เลือกให้แล้ว ✓ <span class="muted small">(ไม่ใช่? ค้นหาแมพอื่นด้านล่างได้)</span>`;}
+  else box.innerHTML=`⚠️ อ่านชื่อแมพแล้วไม่พบในรายการ${r?.raw?` <span class="muted small">(อ่านได้: ${esc(r.raw)})</span>`:''} — ค้นหาเองด้านล่าง หรือเพิ่มแมพใหม่ได้`;
+}
 
 /* ===================== step-by-step wizards ===================== */
 function makeWizard(o){
@@ -1631,7 +1733,7 @@ $('nc_avClear').onclick=()=>{ncAvatar=null;drawNcAvatar();};
 /* ---- start wizard ---- */
 function checkedStartItems(){const out=[];$('s_items').querySelectorAll('.pick').forEach(p=>{if(p.querySelector('input[type=checkbox]').checked)out.push({id:p.dataset.id,qty:num(p.querySelector('input[type=number]').value)});});return out;}
 const SW=makeWizard({root:'startCard',steps:'sw_steps',back:'sw_back',next:'sw_next',finish:'btnStart',err:'sw_err',
-  labels:['ตัวละคร','แมพ','จอเกม','อ่านตัวเลข','ค่าตอนเริ่ม','ยา','หน้าต่างลอย','ตรวจทาน'],
+  labels:['จอเกม','ตั้งกรอบอ่าน','ตัวละคร','แมพ','ค่าตอนเริ่ม','ยา','หน้าต่างลอย','ตรวจทาน'],
   validate:{
     char(){const v=$('s_char').value;if(!v)return 'เลือกหรือสร้างตัวละครก่อนนะคะ';
       if(v==='__new'){const n=$('nc_name').value.trim();if(!n)return 'ใส่ชื่อตัวละครก่อนนะคะ';if(characters.some(c=>norm(c.name)===norm(n)))return 'มีตัวละครชื่อนี้อยู่แล้ว เลือกจากการ์ดด้านบนได้เลยค่ะ';}},
@@ -1640,7 +1742,8 @@ const SW=makeWizard({root:'startCard',steps:'sw_steps',back:'sw_back',next:'sw_n
     items(){const miss=checkedStartItems().filter(i=>i.qty==null).map(i=>itemOf(i.id)?.name);if(miss.length)return 'ใส่จำนวนของ: '+miss.join(', ');}
   },
   enter:{
-    char:()=>{renderCharCards();},
+    char:()=>{renderCharCards();if(stream&&OCR.has('who')&&!whoSeen)detectWho();},
+    map:()=>{if(stream&&OCR.has('map')&&!mapSeen)detectMap();},
     screen:()=>mountBlocks(),
     ocr:()=>{mountBlocks();$('ocrNeedShare').style.display=stream?'none':'';},
     stats:()=>{mountBlocks();if(stream&&OCR.hasRegions()&&!$('s_ocrConf').innerHTML)ocrConfirm('s');$('s_statsHint').textContent=$('ocrOn').checked?'✅ กำลังอ่านจออยู่ — EXP และเงินเติมให้แล้ว (แก้ได้) · ใส่เลเวลให้ถูกด้วยนะคะ':'ดูจากในเกมตอนนี้ แล้วกรอกตัวเลขได้เลย';},
