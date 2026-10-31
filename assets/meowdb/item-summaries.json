@@ -1,0 +1,202 @@
+{
+ "1002013": {
+  "desc": "Where to get Blue Bandana: sold by Don Hwang (Kerning City) for 1,200 mesos, or crafted with Tailoring. Level 10 hat. It grants +15 W.DEF and +10 MP.",
+  "page": "721",
+  "title": "Blue Bandana - MapleStory Classic | NiaMeowDB"
+ },
+ "2000000": {
+  "desc": "Where to get Red Potion: sold by Arturo, Dr. Faymus and 6 other shops for 50 mesos, dropped by 4 monsters, or a reward from 7 quests. Restores 100 HP.",
+  "page": "270",
+  "title": "Red Potion - MapleStory Classic | NiaMeowDB"
+ },
+ "2000001": {
+  "desc": "Where to get Orange Potion: sold by Arturo, Dr. Faymus and 6 other shops for 150 mesos, dropped by 4 monsters, or a reward from 3 quests. Restores 250 HP.",
+  "page": "271",
+  "title": "Orange Potion - MapleStory Classic | NiaMeowDB"
+ },
+ "2000002": {
+  "desc": "Where to get White Potion: sold by Arturo, Dr. Faymus and 5 other shops for 350 mesos, dropped by 4 monsters, or a reward from 2 quests. Restores 500 HP.",
+  "page": "272",
+  "title": "White Potion - MapleStory Classic | NiaMeowDB"
+ },
+ "2000003": {
+  "desc": "Where to get Blue Potion: sold by Arturo, Dr. Faymus and 5 other shops for 220 mesos, dropped by 4 monsters, or a reward from 60 quests. Restores 200 MP.",
+  "page": "273",
+  "title": "Blue Potion - MapleStory Classic | NiaMeowDB"
+ },
+ "2000004": {
+  "desc": "Where to get Elixir: dropped by Stumpy, Mushmom and 2 other monsters, or a reward from Jane's First Challenge and 4 other quests. A legendary potion.",
+  "page": "274",
+  "title": "Elixir - MapleStory Classic | NiaMeowDB"
+ },
+ "2002000": {
+  "desc": "Where to get Warrior Potion: sold by 3 shops for 500 mesos, dropped by 3 monsters, or a reward from Third Material Delivery for Building a New House.",
+  "page": "222",
+  "title": "Warrior Potion - MapleStory Classic | NiaMeowDB"
+ },
+ "2002001": {
+  "desc": "Where to get Magic Potion: sold by Len the Fairy for 500 mesos, dropped by 2 monsters, or a reward from First Material Delivery for Building a New House.",
+  "page": "223",
+  "title": "Magic Potion - MapleStory Classic | NiaMeowDB"
+ },
+ "2002002": {
+  "desc": "Where to get Sniper Potion: sold by Arturo and Luna for 500 mesos, dropped by 3 monsters, or a reward from Teo's Even Weirder Hobby. Accuracy +5 for 10 min.",
+  "page": "224",
+  "title": "Sniper Potion - MapleStory Classic | NiaMeowDB"
+ },
+ "2002003": {
+  "desc": "Where to get Dexterity Potion: sold by 2 shops for 500 mesos, dropped by Zombie Mushroom, or a reward from Second Material Delivery for Building a New House.",
+  "page": "225",
+  "title": "Dexterity Potion - MapleStory Classic | NiaMeowDB"
+ },
+ "2002004": {
+  "desc": "Where to get Speed Potion: sold by Arturo (Perion), Dr. Faymus (Kerning City) and 3 other shops for 500 mesos, or dropped by 2 monsters. Speed +8 for 10 min.",
+  "page": "226",
+  "title": "Speed Potion - MapleStory Classic | NiaMeowDB"
+ },
+ "2002011": {
+  "desc": "Where to get Supreme Sniper Potion: sold by Raymond (Henesys) for 600 mesos. Accuracy +7 for 15 min. Increases Accuracy. Use in MapleStory Classic World.",
+  "page": "2554",
+  "title": "Supreme Sniper Potion - MapleStory Classic | NiaMeowDB"
+ },
+ "2002012": {
+  "desc": "Where to get Supreme Dexterity Potion: sold by Max (Kerning City) for 600 mesos, or a reward from The Price of Information. Evasion +7 for 15 min.",
+  "page": "2555",
+  "title": "Supreme Dexterity Potion - MapleStory Classic | NiaMeowDB"
+ },
+ "2002013": {
+  "desc": "Critical Rate +3% for 15 min. Spot enemy weaknesses with a keen eye. Use in MapleStory Classic World.",
+  "page": "2556",
+  "title": "Sharpness Potion - MapleStory Classic | NiaMeowDB"
+ },
+ "2002014": {
+  "desc": "Critical Damage +3% for 15 min. Inflict fatal wounds on enemy weaknesses with ruthless power. Use in MapleStory Classic World.",
+  "page": "2557",
+  "title": "Destructive Potion - MapleStory Classic | NiaMeowDB"
+ },
+ "2010001": {
+  "desc": "Where to get Apple: sold by Arturo (Perion), Dr. Faymus (Kerning City) and 6 other shops for 20 mesos. Restores around 40 HP. A red, ripe, and tasty apple.",
+  "page": "236",
+  "title": "Apple - MapleStory Classic | NiaMeowDB"
+ },
+ "2010002": {
+  "desc": "Where to get Egg: sold by Arturo (Perion), Dr. Faymus (Kerning City) and 6 other shops for 30 mesos, or a reward from 5 quests. Restores around 60 HP.",
+  "page": "237",
+  "title": "Egg - MapleStory Classic | NiaMeowDB"
+ },
+ "2010003": {
+  "desc": "Where to get Meat: sold by Arturo (Perion), Dr. Faymus (Kerning City) and 5 other shops for 80 mesos, or a reward from 7 quests. Restores around 160 HP.",
+  "page": "238",
+  "title": "Meat - MapleStory Classic | NiaMeowDB"
+ },
+ "2010004": {
+  "desc": "Where to get Orange: sold by Arturo, Dr. Faymus and 6 other shops for 50 mesos, dropped by Jr. Necki, or a reward from 16 quests. Restores around 50 MP.",
+  "page": "239",
+  "title": "Orange - MapleStory Classic | NiaMeowDB"
+ },
+ "2010005": {
+  "desc": "Where to get Lemon: sold by Arturo, Dr. Faymus and 5 other shops for 150 mesos, dropped by 4 monsters, or a reward from 19 quests. Restores around 150 MP.",
+  "page": "240",
+  "title": "Lemon - MapleStory Classic | NiaMeowDB"
+ },
+ "2020000": {
+  "desc": "Where to get Salad: sold by 24 Hr Mobile Store (Sleepywood Dungeon) and Valen (Florina Beach) for 220 mesos. Restores 200 MP. Needed for Luke the Security Guy.",
+  "page": "247",
+  "title": "Salad - MapleStory Classic | NiaMeowDB"
+ },
+ "2020001": {
+  "desc": "Where to get Fried Chicken: sold by 24 Hr Mobile Store, Max and 2 other shops for 60 mesos, or a reward from Teo's Weird Hobby. Restores around 120 HP.",
+  "page": "248",
+  "title": "Fried Chicken - MapleStory Classic | NiaMeowDB"
+ },
+ "2020003": {
+  "desc": "Where to get Pizza: sold by 24 Hr Mobile Store (Sleepywood Dungeon) and Valen (Florina Beach) for 252 mesos. Restores 360 HP. A freshly-baked pizza.",
+  "page": "250",
+  "title": "Pizza - MapleStory Classic | NiaMeowDB"
+ },
+ "2020004": {
+  "desc": "Where to get Hamburger: sold by 24 Hr Mobile Store (Sleepywood Dungeon) and Valen (Florina Beach) for 350 mesos. Restores 500 HP.",
+  "page": "251",
+  "title": "Hamburger - MapleStory Classic | NiaMeowDB"
+ },
+ "2020005": {
+  "desc": "Where to get Hot Dog: sold by 24 Hr Mobile Store (Sleepywood Dungeon), Raymond (Henesys) and Valen (Florina Beach) for 180 mesos. Restores 300 HP.",
+  "page": "252",
+  "title": "Hot Dog - MapleStory Classic | NiaMeowDB"
+ },
+ "2020007": {
+  "desc": "Where to get Dried Squid: sold by Max (Kerning City) for 180 mesos. Restores 300 HP. Flavorful and chewy. Use Food in MapleStory Classic World.",
+  "page": "254",
+  "title": "Dried Squid - MapleStory Classic | NiaMeowDB"
+ },
+ "2020008": {
+  "desc": "Restores 800 HP. Tastes great, and quite nutritious. Use Food in MapleStory Classic World.",
+  "page": "255",
+  "title": "Fat Sausage - MapleStory Classic | NiaMeowDB"
+ },
+ "2020009": {
+  "desc": "Restores 450 MP. Pure orange juice. Use Food in MapleStory Classic World.",
+  "page": "256",
+  "title": "Orange Juice - MapleStory Classic | NiaMeowDB"
+ },
+ "2020010": {
+  "desc": "Restores 900 MP. Made with real grapes. Use Food in MapleStory Classic World.",
+  "page": "257",
+  "title": "Grape Juice - MapleStory Classic | NiaMeowDB"
+ },
+ "2020018": {
+  "desc": "Restores 300 HP and 300 MP. A mouth-watering stew crafted by Mrs. Ming Ming. Use in MapleStory Classic World.",
+  "page": "2562",
+  "title": "Mrs. Ming Ming's Stew - MapleStory Classic | NiaMeowDB"
+ },
+ "2020019": {
+  "desc": "Restores 300 HP and 300 MP. A hearty seafood stew crafted by Andre. Use in MapleStory Classic World.",
+  "page": "2563",
+  "title": "Andre's Seafood Soup - MapleStory Classic | NiaMeowDB"
+ },
+ "2022003": {
+  "desc": "Where to get Unagi: sold by 24 Hr Mobile Store (Sleepywood Dungeon), Mr. Sweatbottom (Sleepywood) and Valen (Florina Beach) for 1,000 mesos. Restores 1,000 HP.",
+  "page": "264",
+  "title": "Unagi - MapleStory Classic | NiaMeowDB"
+ },
+ "2060000": {
+  "desc": "Where to get Arrows for Bows: sold by Arturo, Dr. Faymus and 6 other shops from 1 mesos, crafted with Woodcrafting, or dropped by 4 monsters.",
+  "page": "209",
+  "title": "Arrows for Bows - MapleStory Classic | NiaMeowDB"
+ },
+ "2060001": {
+  "desc": "Where to get Bronze Arrows for Bows: crafted with Woodcrafting. Used to craft Bronze Arrows for Crossbows. Weapon Attack +1. A quiver full of bronze arrows.",
+  "page": "210",
+  "title": "Bronze Arrows for Bows - MapleStory Classic | NiaMeowDB"
+ },
+ "2061000": {
+  "desc": "Where to get Arrows for Crossbows: sold by Arturo, Dr. Faymus and 6 other shops from 1 mesos, crafted with Woodcrafting, or dropped by 4 monsters.",
+  "page": "213",
+  "title": "Arrows for Crossbows - MapleStory Classic | NiaMeowDB"
+ },
+ "2061001": {
+  "desc": "Where to get Bronze Arrows for Crossbows: crafted with Woodcrafting. Used to craft Bronze Arrows for Bows. Weapon Attack +1. A quiver full of bronze arrows.",
+  "page": "214",
+  "title": "Bronze Arrows for Crossbows - MapleStory Classic | NiaMeowDB"
+ },
+ "2070000": {
+  "desc": "Where to get Subi Throwing Stars: sold by 24 Hr Mobile Store (Sleepywood Dungeon) and 7 other shops for 500 mesos. Level Required: 10, Weapon Attack +15.",
+  "page": "294",
+  "title": "Subi Throwing Stars - MapleStory Classic | NiaMeowDB"
+ },
+ "2070001": {
+  "desc": "Where to get Wolbi Throwing Stars: dropped by Fire Boar. Level Required: 10, Weapon Attack +17. Throwing stars made out of steel.",
+  "page": "295",
+  "title": "Wolbi Throwing Stars - MapleStory Classic | NiaMeowDB"
+ },
+ "2210005": {
+  "desc": "What would life be like as an Orange Mushroom...? Right-click on the buff icon to cancel the transformation. Use in MapleStory Classic World.",
+  "page": "2571",
+  "title": "Orange Mushroom Daydream - MapleStory Classic | NiaMeowDB"
+ },
+ "2210006": {
+  "desc": "What would life be like as a Ribbon Pig...? Right-click on the buff icon to cancel the transformation. Use in MapleStory Classic World.",
+  "page": "2572",
+  "title": "Ribbon Pig Daydream - MapleStory Classic | NiaMeowDB"
+ }
+}
