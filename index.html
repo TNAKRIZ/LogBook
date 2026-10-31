@@ -171,7 +171,8 @@ video{width:100%;background:#000;border-radius:10px;aspect-ratio:16/9;object-fit
 .lg{display:inline-flex;align-items:center;gap:5px}.lg img{height:24px;border:1px solid var(--line);border-radius:4px;background:#fff;image-rendering:pixelated;max-width:220px;object-fit:contain}
 .lg .arr{color:var(--muted)}.lg .v{font-weight:700}.lg.ok{color:var(--good)}.lg.no{color:var(--bad)}.lg.wait{color:var(--muted)}
 .ocrzoom[hidden]{display:none}
-.detnote:empty{display:none}.detnote{margin:8px 0;padding:8px 12px;border-radius:10px;border:1px dashed var(--line);background:var(--bg);font-size:13px}.detnote b{color:var(--ink)}
+.detnote:empty,.detall:empty{display:none}
+.detall{margin-top:12px;border:2px solid #141c3c;border-radius:12px;padding:12px 14px;background:var(--bg)}.detall h4{margin:0 0 6px}.detall .grid2{display:grid;grid-template-columns:110px 1fr;gap:4px 10px;font-size:14px}.detall .grid2 span:nth-child(odd){color:var(--muted);font-weight:700;font-size:12.5px}.detnote{margin:8px 0;padding:8px 12px;border-radius:10px;border:1px dashed var(--line);background:var(--bg);font-size:13px}.detnote b{color:var(--ink)}
 .ocrzoom{display:flex;flex-direction:column;gap:2px;margin-top:6px}.ocrzoom canvas{max-width:100%;border:2px solid #f5c542;border-radius:6px;image-rendering:pixelated;background:#000;align-self:flex-start}
 .ocrconf{border:2px solid var(--line);border-radius:12px;padding:10px 12px;margin:10px 0;background:var(--bg);display:grid;gap:8px}
 .ocrconf .r{display:flex;align-items:center;gap:10px;flex-wrap:wrap}.ocrconf .r .k{width:70px;color:var(--muted);font-weight:700;font-size:12.5px}
@@ -277,6 +278,8 @@ footer a{color:inherit}
           <button class="btn ghost sm" id="ocrWhoBox" type="button" title="กรอบเดียวคลุม LV + อาชีพ + ชื่อตัวละคร ที่แถบล่างซ้าย">🎯 กรอบ เลเวล/ชื่อ</button>
           <button class="btn ghost sm" id="ocrMapBox" type="button" title="ชื่อแมพบนแผนที่มุมซ้ายบน">🎯 กรอบ ชื่อแมพ</button>
           <label class="row small" style="margin:0;color:var(--ink)"><input type="checkbox" id="ocrOn"> เปิดอ่าน ทุก</label><select id="ocrInt" style="width:auto" title="อ่านถี่ = ตัวเลขสดกว่า แต่กินเครื่องมากกว่า"><option value="5">5 วิ</option><option value="15">15 วิ</option><option value="30">30 วิ</option></select>
+          <button class="btn ghost sm" id="ocrReset" type="button" title="ล้างตัวเลขที่นับไว้ แล้วเริ่มนับใหม่จากตอนนี้ (กด 2 ครั้ง)">↺ เริ่มนับใหม่</button>
+          <button class="btn ghost sm" id="ocrSave" type="button" title="บันทึกภาพจอที่ระบบเห็นตอนนี้ เป็นไฟล์ PNG ส่งให้ผู้พัฒนาใช้ทดสอบ">💾 เก็บภาพทดสอบ</button>
           <button class="btn sm" id="pipBtn" type="button" title="หน้าต่างเล็กลอยทับเกม ดูสถิติได้โดยไม่ต้องสลับจอ">🪟 หน้าต่างลอย</button>
         </div>
         <p class="muted small" id="ocrHint" style="margin:6px 0 0">กด "ตั้งกรอบ" แล้วลากกรอบ<b>ให้แคบ คลุมเฉพาะตัวเลข</b> (ไม่รวมคำว่า EXP, หลอด, ไอคอนเหรียญ หรือปุ่ม) · ครั้งแรกต้องต่อเน็ตเพื่อโหลดตัวอ่านตัวเลข</p>
@@ -296,6 +299,7 @@ footer a{color:inherit}
         <h3 class="wt">1 · แชร์หน้าจอเกม <span class="opt">ข้ามได้</span></h3>
         <p class="muted small">กด "เริ่มแชร์หน้าจอ" แล้วเลือกหน้าต่างเกม MapleStory · แชร์ไว้แล้วระบบจะอ่านชื่อ เลเวล แมพ EXP และเงินให้เอง ถ่ายภาพตอนเริ่ม จุดเช็ก และจบรอบให้ด้วย · ถ้าไม่แชร์ก็กด Next ข้ามไปกรอกเองได้</p>
         <div class="whost" data-host="screen"></div>
+        <div class="detall" id="detectAll"></div>
       </div>
 
       <div class="wstep" data-k="ocr">
@@ -926,6 +930,9 @@ async function startShare(){
   video.srcObject=stream;$('screenBlock').classList.remove('nostream');stream.getVideoTracks()[0].addEventListener('ended',stopShare);setTimeout(()=>OCR.drawBoxes(),500);
   $('btnShare').disabled=true;$('btnStopShare').disabled=false;$('btnSnap').disabled=false;
   $('shareStatus').innerHTML='<span class="live-dot"></span>กำลังแชร์หน้าจอ — กด Next ไปตั้งกรอบอ่านตัวเลขได้เลย';setupAuto();$('ocrNeedShare').style.display='none';
+  if(OCR.hasAny()){$('shareStatus').innerHTML='<span class="live-dot"></span>กำลังแชร์หน้าจอ — ใช้กรอบที่ตั้งไว้ครั้งก่อน อ่านข้อมูลให้แล้วด้านล่าง';
+    if(OCR.hasRegions()&&!$('ocrOn').checked){$('ocrOn').checked=true;$('ocrOn').dispatchEvent(new Event('change'));}
+    if(!active)setTimeout(detectAll,900);}
 }
 function stopShare(){
   if(stream)stream.getTracks().forEach(t=>t.stop());stream=null;video.srcObject=null;$('screenBlock').classList.add('nostream');OCR.stop();$('ocrOn').checked=false;
@@ -962,7 +969,7 @@ const OCR=(()=>{
   let worker=null,loading=null,timer=null,busy=false,drawMode=null,dragStart=null;
   let regions={exp:null,meso:null,who:null,map:null};          // normalised {x,y,w,h} in video-frame space
   const st={};                                // live state
-  function reset(){Object.assign(st,{expCand:null,mesoCand:null,t0:null,exp:null,pct:null,meso:null,expGained:0,mesoCollected:0,expHist:[],mesoHist:[],lastExpT:null,lastMesoT:null,errExp:0,errMeso:0,black:false,log:[],reqs:[],expWin:[],mesoWin:[],expRej:[],mesoRej:[],level:null,levelAtExp:null,cycle:0});}
+  function reset(){Object.assign(st,{expCand:null,mesoCand:null,t0:null,exp:null,pct:null,meso:null,expGained:0,mesoCollected:0,expHist:[],mesoHist:[],lastExpT:null,lastMesoT:null,errExp:0,errMeso:0,black:false,log:[],reqs:[],expWin:[],mesoWin:[],expRej:[],mesoRej:[],level:null,levelAtExp:null,cycle:0,expBase:0,expCarry:0,mesoBase:0});}
   reset();
   const ov=()=>$('ocrOverlay');
   /* ---- region drawing ---- */
@@ -1035,21 +1042,29 @@ const OCR=(()=>{
       M[y*W+x]=(I[y1*(W+1)+x1]-I[y0*(W+1)+x1]-I[y1*(W+1)+x0]+I[y0*(W+1)+x0])/((y1-y0)*(x1-x0));}}return M;}
   function cleanMask(mask,W,H,scale,S){
     const n=W*H,lab=new Int32Array(n),comps=[null],stack=[];
+    // erase long straight lines first (field borders, window frames): otherwise text that touches a border
+    // becomes one big blob with it and is thrown away together
+    {mask=mask.slice();const hx=Math.max(W*0.3,H*1.2),vy=H*0.85;
+      for(let y=0;y<H;y++){let x0=0;for(let x=0;x<=W;x++){const on=x<W&&mask[y*W+x];if(!on){if(x-x0>=hx)for(let k=x0;k<x;k++)mask[y*W+k]=0;x0=x+1;}}}
+      for(let x=0;x<W;x++){let y0=0;for(let y=0;y<=H;y++){const on=y<H&&mask[y*W+x];if(!on){if(y-y0>=vy)for(let k=y0;k<y;k++)mask[k*W+x]=0;y0=y+1;}}}}
     for(let i=0;i<n;i++){if(!mask[i]||lab[i])continue;const id=comps.length;let x0=1e9,x1=-1,y0=1e9,y1=-1,area=0,sat=0;stack.push(i);lab[i]=id;
       while(stack.length){const k=stack.pop();area++;if(S)sat+=S[k];const y=(k/W)|0,x=k-y*W;if(x<x0)x0=x;if(x>x1)x1=x;if(y<y0)y0=y;if(y>y1)y1=y;
         if(x>0&&mask[k-1]&&!lab[k-1]){lab[k-1]=id;stack.push(k-1);}if(x<W-1&&mask[k+1]&&!lab[k+1]){lab[k+1]=id;stack.push(k+1);}
         if(k>=W&&mask[k-W]&&!lab[k-W]){lab[k-W]=id;stack.push(k-W);}if(k+W<n&&mask[k+W]&&!lab[k+W]){lab[k+W]=id;stack.push(k+W);}}
       const w=x1-x0+1,h=y1-y0+1;
-      const drop=x0===0||y0===0||x1===W-1||y1===H-1   // touches the box edge: frame, panel, half-cut icon
+      const drop=x0===0||x1===W-1                      // touches the side of the box: frame, panel, half-cut icon
+        ||(y0===0||y1===H-1)&&(w>h*1.6||h>=H*0.95)      // touches top/bottom: only bars & frames (a digit clipped by a tight box stays)
         ||area<scale*scale*2||h<scale*3            // specks, commas, dots
         ||h>H*0.8||w>h*3.2||area>w*h*0.85&&w>h*1.5; // gauge bars, borders, filled blocks
       comps.push({x0,x1,y0,y1,w,h,area,drop,sat:sat/area});}
     let live=comps.filter(c=>c&&!c.drop);if(!live.length)return null;
     // main text height: the height that most glyphs share
-    let modeH=live[0].h,bestN=0;for(const c of live){const k=live.filter(o=>o.h>=c.h*0.8&&o.h<=c.h*1.25).length;if(k>bestN||(k===bestN&&c.h>modeH)){bestN=k;modeH=c.h;}}
-    live=live.filter(c=>c.h>=modeH*0.6&&c.h<=modeH*1.45);
-    const cy=live.map(c=>(c.y0+c.y1)/2).sort((a,b)=>a-b),mid=cy[cy.length>>1];
-    live=live.filter(c=>Math.abs((c.y0+c.y1)/2-mid)<=modeH*0.6).sort((a,b)=>a.x0-b.x0);
+    // the text line = the biggest group of glyphs that share a height AND sit on the same row
+    // (a box may also catch inventory slots or background shapes of similar size on other rows)
+    let modeH=live[0].h,mid=(live[0].y0+live[0].y1)/2,bestN=0;
+    for(const c of live){const cy0=(c.y0+c.y1)/2;const k=live.filter(o=>o.h>=c.h*0.8&&o.h<=c.h*1.25&&Math.abs((o.y0+o.y1)/2-cy0)<=c.h*0.35).length;
+      if(k>bestN||(k===bestN&&c.h>modeH)){bestN=k;modeH=c.h;mid=cy0;}}
+    live=live.filter(c=>c.h>=modeH*0.6&&c.h<=modeH*1.45&&Math.abs((c.y0+c.y1)/2-mid)<=modeH*0.6).sort((a,b)=>a.x0-b.x0);
     if(!live.length)return null;
     const top=mid-modeH/2,lineX0=live[0].x0,lineX1=live[live.length-1].x1;
     // decimal points: small blobs sitting on the baseline inside the text line (commas are removed the same way, they never get drawn)
@@ -1076,26 +1091,36 @@ const OCR=(()=>{
       const rest=close>=0?after.slice(0,close):after;                                      // stop at the closing bracket
       const xEnd=close>=0?after[close].x0:1e9;
       pct=paint([...rest,...dots.filter(d=>d.x0>b.x1&&d.x1<xEnd)]);}
-    return {canvas:paint(live),num,pct,count:live.length,modeH};
+    const box={x0:Math.min(...live.map(c=>c.x0)),x1:Math.max(...live.map(c=>c.x1)),y0:Math.min(...live.map(c=>c.y0)),y1:Math.max(...live.map(c=>c.y1))};
+    return {canvas:paint(live),num,pct,count:live.length,modeH,box,W,H};
   }
-  function variants(r){
+  function variants(r0){let r=r0;
     const out=[];let raw=null;
     // pass 1: find how tall the digits are, then upscale so they are ~44px — Tesseract's sweet spot
     let fit=0;{const cr=grabCrop(r,true);if(!cr)return null;const {L,W,H,scale,S}=cr,th=otsu(L);let best=null;
       for(const bright of [true,false]){const m=new Uint8Array(W*H);for(let i=0;i<W*H;i++)m[i]=(L[i]>th)===bright?1:0;const v=cleanMask(m,W,H,scale,S);if(v&&(!best||v.count>best.count))best=v;}
-      if(best)fit=Math.max(2,Math.min(12,Math.round(scale*44/best.modeH)));}
+      if(best){fit=Math.max(2,Math.min(12,Math.round(scale*44/best.modeH)));
+        // refocus: a wide box mixes many backgrounds, which spoils the light/dark split — zoom in on the line that was found
+        const b=best.box,mx=best.modeH*0.8,my=best.modeH*0.55;
+        const x0=Math.max(0,b.x0-mx),x1=Math.min(W,b.x1+1+mx),y0=Math.max(0,b.y0-my),y1=Math.min(H,b.y1+1+my);
+        if((x1-x0)*(y1-y0)<W*H*0.7)r={x:r.x+r.w*x0/W,y:r.y+r.h*y0/H,w:r.w*(x1-x0)/W,h:r.h*(y1-y0)/H};}}
+    const lists=[];
+    for(const area of r===r0?[r0]:[r,r0]){const out=[];
     for(const smooth of [true,false]){
-      const cr=grabCrop(r,smooth,fit);if(!cr)return null;raw=cr.raw;const {L,W,H,scale}=cr,n=W*H;
+      const cr=grabCrop(area,smooth,fit);if(!cr)return null;if(area===r0)raw=cr.raw;const {L,W,H,scale}=cr,n=W*H;
       const th=otsu(L),M=localMean(L,W,H,Math.round(H*0.6)),part=[];
       const mk=(tag,f)=>{const m=new Uint8Array(n);for(let i=0;i<n;i++)m[i]=f(i)?1:0;const v=cleanMask(m,W,H,scale,cr.S);if(v&&v.count>=1&&v.count<=28)part.push({...v,tag:(smooth?'':'px-')+tag});};
       mk('light',i=>L[i]>th);mk('dark',i=>L[i]<=th);
       // stricter cut: separates glyphs that blur together in a low-resolution capture
       {const hi=th+(255-th)*0.4,lo=th*0.6;mk('light-strict',i=>L[i]>hi);mk('dark-strict',i=>L[i]<lo);}
       mk('light-local',i=>L[i]>M[i]+18);mk('dark-local',i=>L[i]<M[i]-18);
-      part.sort((a,b)=>b.count-a.count);out.push(...part);}
-    // try the most promising first: the best smooth and the best pixel variant, then the rest
-    const firstPx=out.findIndex(v=>v.tag.startsWith('px-'));if(firstPx>1)out.splice(1,0,out.splice(firstPx,1)[0]);
-    return {list:out,raw};
+      part.sort((a,b)=>b.count-a.count);out.push(...part.map(v=>({...v,tag:(area===r0?'':'focus-')+v.tag})));}
+    // most promising first: the best smooth and the best pixel variant, then the rest
+    const firstPx=out.findIndex(v=>v.tag.includes('px-'));if(firstPx>1)out.splice(1,0,out.splice(firstPx,1)[0]);
+    lists.push(out);}
+    // interleave the zoomed-in and the original box, so both get a say
+    const list=[];for(let i=0;i<Math.max(...lists.map(l=>l.length));i++)for(const l of lists)if(l[i])list.push(l[i]);
+    return {list,raw};
   }
   // MapleStory always shows the % with 2 decimals; dots/commas are removed before reading, so restore the dot.
   // Read the LAST number before the bracket, so stray marks from an "EXP" label in the box are ignored.
@@ -1114,21 +1139,34 @@ const OCR=(()=>{
         if(val&&val.pct==null){const f=parseExp(text);if(f?.pct!=null)val.pct=f.pct;}}
       else{text=(await w.recognize(v.canvas)).data.text.trim();val=kind==='exp'?parseExp(text):parseMeso(text);}
       res.push({v,text,val});
-      // two variants agree on a believable value → good enough (an EXP read must include the %, a Meso read at least 3 digits)
+      // stop early once 3 reads agree on a believable value (an EXP read must include the %, a Meso read at least 3 digits)
       const solid=kind==='exp'?val?.pct!=null:val!=null&&(String(val).length>=3||st.meso!=null&&Math.abs(val-st.meso)<1000);
-      if(solid&&res.length>=2&&agreeCount(res,kind,val)>=2)break;}
-    return {best:pickBest(res,kind),raw:V.raw,tries:res.length};
+      if(solid&&agreeCount(res,kind,val)>=3)break;
+      if(res.length>=10)break;}
+    return {best:pickBest(res,kind),raw:V.raw,tries:res.length,all:res.map(x=>x.v.tag+':'+x.text)};
   }
   const same=(kind,a,b)=>a!=null&&b!=null&&(kind==='exp'?a.exp===b.exp&&a.pct===b.pct:a===b);
   const agreeCount=(res,kind,val)=>res.filter(r=>same(kind,r.val,val)).length;
+  // digit-by-digit vote between readings of the same length: 186058 / 186056 / 186056 → 186056
+  function digitVote(strs,minLen=1){
+    const byLen=new Map();for(const x of strs){if(!x||x.length<minLen)continue;byLen.set(x.length,[...(byLen.get(x.length)||[]),x]);}
+    let grp=null;for(const [L,g] of byLen)if(!grp||g.length>grp.length||(g.length===grp.length&&L>grp[0].length))grp=g;
+    if(!grp||grp.length<3)return null;
+    return [...grp[0]].map((_,i)=>{const c=new Map();for(const x of grp)c.set(x[i],(c.get(x[i])||0)+1);return [...c].sort((a,b)=>b[1]-a[1])[0][0];}).join('');
+  }
   function pickBest(res,kind){
+    const vals=res.map(r=>r.val).filter(v=>v!=null);
+    if(vals.length>=3){
+      if(kind==='exp'){const e=digitVote(vals.map(v=>String(v.exp)),2),p=digitVote(vals.filter(v=>v.pct!=null).map(v=>v.pct.toFixed(2).padStart(6,'0')));
+        if(e){const val={exp:+e,pct:p?+p:(vals.find(v=>v.pct!=null)?.pct??null)};res=[...res,{v:res[0].v,text:'vote: '+e+(p?` [${+p}%]`:''),val,voted:true}];}}
+      else{const m=digitVote(vals.map(String),3);if(m)res=[...res,{v:res[0].v,text:'vote: '+m,val:+m,voted:true}];}}
     let best=null,bs=-1e9;
     for(const r of res){if(r.val==null)continue;let sc=0;
       if(kind==='exp'){const len=String(r.val.exp).length;sc+=r.val.pct!=null?4:0;sc+=len>=2&&len<=11?1:-3;
         if(st.exp!=null){const d=r.val.exp-st.exp;sc+=d>=0&&d<Math.max(5000,st.exp*0.5)?3:(r.val.pct!=null&&st.pct>60&&r.val.pct<40?2:-2);}}
-      else{const len=String(r.val).length;sc+=len>=1&&len<=11?1:-3;sc+=Math.min(len,9)*0.2;
+      else{const len=String(r.val).length;sc+=len>=3&&len<=11?1:-4;sc+=Math.min(len,9)*0.2;
         if(st.meso!=null){sc+=Math.abs(r.val-st.meso)<=Math.max(500000,st.meso*0.5)?3:-2;}}
-      sc+=(agreeCount(res,kind,r.val)-1)*3;
+      sc+=(agreeCount(res,kind,r.val)-1)*3;if(r.voted)sc+=2.5;
       if(sc>bs){bs=sc;best=r;}}
     return best||res[0]||null;
   }
@@ -1217,33 +1255,50 @@ const OCR=(()=>{
     if(rej.length===3&&rej.every((r,i)=>!i||(r.val>=rej[i-1].val-tol&&r.val-rej[i-1].val<=tol*4))){apply(rej[2].val);rej.length=0;return true;}
     return false;
   }
+  /* Gains are the NET difference from the starting point (current − start, plus levels finished on the way),
+     never a running sum of read-to-read steps — so a misread that comes and goes cannot inflate the totals. */
+  const expTotal=()=>Math.max(0,st.expCarry+(st.exp-st.expBase));
+  const mesoTotal=()=>Math.max(0,st.meso-st.mesoBase);
   function acceptExp(raw,t){
     const v=cleanExp(raw);if(!v)return false;
-    const e=smooth(st.expWin,v.exp);if(e==null)return st.exp==null?false:false;
+    const e=smooth(st.expWin,v.exp);if(e==null)return false;
     const pct=v.pct!=null&&v.exp===e?v.pct:(reqNow()?+(e/reqNow()*100).toFixed(2):v.pct);
-    if(st.exp==null){st.exp=e;st.pct=pct;st.levelAtExp=st.level;st.t0=st.t0||t;st.lastExpT=t;st.expHist.push({t,c:0});return true;}
+    if(st.exp==null){st.exp=st.expBase=e;st.pct=pct;st.levelAtExp=st.level;st.t0=st.t0||t;st.lastExpT=t;st.expHist.push({t,c:0});return true;}
     const R=reqNow()||(st.pct>0?st.exp/(st.pct/100):null);
-    let gain=e-st.exp;
     const leveled=st.level!=null&&st.levelAtExp!=null&&st.level>st.levelAtExp;
-    if(gain<0&&R&&(leveled||(st.pct!=null&&pct!=null&&st.pct>60&&pct<40))){gain=(R-st.exp)+e;st.reqs.length=0;}   // level-up: finish the old level, start learning the new one
+    if(e<st.exp&&R&&(leveled||(st.pct!=null&&pct!=null&&st.pct>60&&pct<40))){      // level-up: bank the old level, start the new one
+      st.expCarry+=R-st.expBase;st.expBase=0;st.reqs.length=0;st.exp=e;st.pct=pct;st.levelAtExp=st.level;st.expRej.length=0;st.lastExpT=t;st.expGained=expTotal();st.expHist.push({t,c:st.expGained});return true;}
     st.levelAtExp=st.level;
-    const ok=gain>=0&&(!R||gain<=R*0.2);                                         // ≤20% of a level per read
-    if(!ok){rebaseIfStuck(st.expRej,e,t,R?R*0.02:5000,val=>{st.exp=val;st.pct=reqNow()?+(val/reqNow()*100).toFixed(2):pct;st.lastExpT=t;});return false;}
-    st.expRej.length=0;st.exp=e;st.pct=pct??st.pct;st.expGained+=gain;st.lastExpT=t;st.expHist.push({t,c:st.expGained});
+    const d=e-st.exp,dt=Math.max(1,(t-(st.lastExpT||t))/1000);
+    const cap=R?Math.max(R*0.01,R*0.0005*dt):Math.max(5000,st.exp*0.02);           // a believable step for the time passed
+    if(d<0||d>cap){rebaseIfStuck(st.expRej,e,t,R?R*0.01:5000,val=>{
+        if(st.expHist.length<=3)st.expBase+=val-st.exp;                           // the very first value was the misread
+        st.exp=val;st.pct=reqNow()?+(val/reqNow()*100).toFixed(2):pct;st.lastExpT=t;st.expGained=expTotal();st.expHist.push({t,c:st.expGained});});return false;}
+    st.expRej.length=0;st.exp=e;st.pct=pct??st.pct;st.lastExpT=t;st.expGained=expTotal();st.expHist.push({t,c:st.expGained});
     return true;
   }
   function acceptMeso(v,t){
     if(v==null||!isFinite(v))return false;
     if(String(v).length<3&&!(st.meso!=null&&Math.abs(v-st.meso)<1000))return false;   // "1", "41" … = a stray mark
     const m=smooth(st.mesoWin,v);if(m==null)return false;
-    if(st.meso==null){st.meso=m;st.t0=st.t0||t;st.lastMesoT=t;st.mesoHist.push({t,c:0});return true;}
-    const d=m-st.meso;
-    if(Math.abs(d)>Math.max(300000,st.meso*0.3)){rebaseIfStuck(st.mesoRej,m,t,Math.max(5000,m*0.01),val=>{st.meso=val;st.lastMesoT=t;});return false;}
-    st.mesoRej.length=0;
-    if(d>0)st.mesoCollected+=d;                 // only pick-ups count (purchases are ignored)
-    st.meso=m;st.lastMesoT=t;st.mesoHist.push({t,c:st.mesoCollected});return true;
+    if(st.meso==null){st.meso=st.mesoBase=m;st.t0=st.t0||t;st.lastMesoT=t;st.mesoHist.push({t,c:0});return true;}
+    const d=m-st.meso,dt=Math.max(1,(t-(st.lastMesoT||t))/1000);
+    const cap=Math.max(3000,400*dt,st.meso*0.004);                                   // pick-ups are small; bigger jumps need 3 matching reads
+    if(d<0||d>cap){rebaseIfStuck(st.mesoRej,m,t,Math.max(2000,m*0.005),val=>{
+        // a lasting change that is not farming (bought potions, sold items, or the start value was misread):
+        // move the starting point with it so it is not counted as Meso earned
+        st.mesoBase+=val-st.meso;st.meso=val;st.lastMesoT=t;st.mesoCollected=mesoTotal();st.mesoHist.push({t,c:st.mesoCollected});});return false;}
+    st.mesoRej.length=0;st.meso=m;st.lastMesoT=t;st.mesoCollected=mesoTotal();st.mesoHist.push({t,c:st.mesoCollected});return true;
   }
-  const perMin=hist=>{const now=Date.now(),win=hist.filter(h=>now-h.t<=60000);if(win.length<2)return null;const a=win[0],b=win[win.length-1];return b.t>a.t?(b.c-a.c)/((b.t-a.t)/60000):null;};
+  // start from the values the player confirmed (start of the adventure) — the reader then only has to follow changes
+  function seed(v,t=Date.now()){
+    if(v.level!=null)st.level=st.levelAtExp=v.level;
+    if(v.exp!=null){st.exp=st.expBase=v.exp;st.expWin=[v.exp,v.exp];st.pct=v.pct??null;st.lastExpT=t;st.expHist=[{t,c:0}];
+      if(v.pct>0.3){const r=v.exp/(v.pct/100);st.reqs=[r,r,r];}}
+    if(v.mesos!=null){st.meso=st.mesoBase=v.mesos;st.mesoWin=[v.mesos,v.mesos];st.lastMesoT=t;st.mesoHist=[{t,c:0}];}
+    st.t0=t;render();
+  }
+  const perMin=hist=>{const now=Date.now(),win=hist.filter(h=>now-h.t<=90000);if(win.length<2)return null;const a=win[0],b=win[win.length-1];return b.t>a.t?Math.max(0,(b.c-a.c)/((b.t-a.t)/60000)):null;};
   const perHr=(total,t0)=>t0&&Date.now()-t0>30000?total/((Date.now()-t0)/3.6e6):null;
   function isBlack(){const c=document.createElement('canvas');c.width=48;c.height=27;const g=c.getContext('2d',{willReadFrequently:true});
     g.drawImage(video,0,0,48,27);const d=g.getImageData(0,0,48,27).data;let mx=0;for(let i=0;i<d.length;i+=4)mx=Math.max(mx,d[i],d[i+1],d[i+2]);return mx<24;}
@@ -1256,7 +1311,7 @@ const OCR=(()=>{
     out.black=isBlack();if(out.black)return out;
     const w=await ensure();
     for(const k of ['exp','meso']){if(!regions[k])continue;const r=await readRegion(w,k);if(!r)continue;const K=k==='exp'?'Exp':'Meso';
-      out[k]=r.best?.val??null;out['raw'+K]=r.best?.text||'';out['img'+K]=shot(r.raw,36);out['bin'+K]=r.best?shot(r.best.v.canvas,30):null;}
+      out[k]=r.best?.val??null;out['all'+K]=r.all;out['raw'+K]=r.best?.text||'';out['img'+K]=shot(r.raw,36);out['bin'+K]=r.best?shot(r.best.v.canvas,30):null;}
     return out;
   }
   async function readOnce(){
@@ -1324,16 +1379,40 @@ const OCR=(()=>{
     bindOverlay();
     try{const v=localStorage.getItem('logbook-ocr-int');if(v)$('ocrInt').value=v;}catch(e){}
     $('ocrInt').onchange=e=>{try{localStorage.setItem('logbook-ocr-int',e.target.value);}catch(_){}if(timer)start();};
-    $('ocrExpBox').onclick=()=>startDraw('exp');$('pipBtn').onclick=()=>PIP.open();$('ocrMesoBox').onclick=()=>startDraw('meso');$('ocrWhoBox').onclick=()=>startDraw('who');$('ocrMapBox').onclick=()=>startDraw('map');
+    $('ocrExpBox').onclick=()=>startDraw('exp');armReset($('ocrReset'),'↺ เริ่มนับใหม่','กดอีกครั้งเพื่อยืนยัน');$('ocrSave').onclick=saveFrame;$('pipBtn').onclick=()=>PIP.open();$('ocrMesoBox').onclick=()=>startDraw('meso');$('ocrWhoBox').onclick=()=>startDraw('who');$('ocrMapBox').onclick=()=>startDraw('map');
     $('ocrOn').onchange=e=>{if(e.target.checked){if(!stream){alert('เริ่มแชร์หน้าจอเกมก่อนนะคะ');e.target.checked=false;return;}if(!regions.exp&&!regions.meso){alert('ตั้งกรอบ EXP หรือ Meso ก่อนนะคะ');e.target.checked=false;return;}start();}else stop();};
     // typing by hand turns autofill off for that field
     ['s_level','s_exp','s_pct','s_mesos','c_level','c_exp','c_pct','e_level','e_exp','e_pct','e_mesos'].forEach(id=>$(id)?.addEventListener('input',e=>{e.target.dataset.auto='0';}));
     video.addEventListener('loadedmetadata',()=>drawBoxes());
     render();
   }
-  return {init,live,setTicker,readNow,hasRegions:()=>!!(regions.exp||regions.meso),has:k=>!!regions[k],readWho,readMap,_readNow:readNow,reset:()=>{reset();render();},snapshot:()=>({expGained:st.expGained,mesoCollected:st.mesoCollected,t0:st.t0}),stop,drawBoxes,_parseExp:parseExp,_parseMeso:parseMeso,_st:st,_accExp:acceptExp,_reqNow:reqNow,_accMeso:acceptMeso};
+  // save exactly what the reader sees (full frame, PNG) — the boxes are stored inside the file for the developer
+  async function saveFrame(){
+    if(!stream||!video.videoWidth){alert('เริ่มแชร์หน้าจอก่อนนะคะ');return;}
+    const c=document.createElement('canvas');c.width=video.videoWidth;c.height=video.videoHeight;c.getContext('2d').drawImage(video,0,0);
+    const blob=await new Promise(r=>c.toBlob(r,'image/png'));let buf=new Uint8Array(await blob.arrayBuffer());
+    const info=JSON.stringify({app:'LogBook',v:1,w:c.width,h:c.height,regions,read:st.log[st.log.length-1]?{exp:st.log[st.log.length-1].r.exp,meso:st.log[st.log.length-1].r.meso}:null,ua:navigator.userAgent});
+    buf=pngWithText(buf,'logbook',info);
+    const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([buf],{type:'image/png'}));
+    const d=new Date(),p=n=>String(n).padStart(2,'0');a.download=`logbook-test-${d.getFullYear()}${p(d.getMonth()+1)}${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}.png`;
+    document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),5000);
+    $('ocrHint').textContent='💾 เก็บภาพแล้ว — ส่งไฟล์ logbook-test-….png ให้ผู้พัฒนาได้เลย';
+  }
+  function pngWithText(png,key,text){ // insert a tEXt chunk right after IHDR
+    const enc=new TextEncoder(),data=enc.encode(key+'\0'+text),len=data.length;
+    const chunk=new Uint8Array(12+len),dv=new DataView(chunk.buffer);dv.setUint32(0,len);chunk.set(enc.encode('tEXt'),4);chunk.set(data,8);
+    let crc=-1;const tbl=pngWithText.t||(pngWithText.t=Array.from({length:256},(_,n)=>{let c=n;for(let k=0;k<8;k++)c=c&1?0xEDB88320^(c>>>1):c>>>1;return c>>>0;}));
+    for(let i=4;i<8+len;i++)crc=tbl[(crc^chunk[i])&255]^(crc>>>8);dv.setUint32(8+len,(crc^-1)>>>0);
+    const at=8+25;const out=new Uint8Array(png.length+chunk.length);out.set(png.subarray(0,at));out.set(chunk,at);out.set(png.subarray(at),at+chunk.length);return out;
+  }
+  function restart(){const was=!!timer;reset();renderLog();render();$('ocrHint').textContent='↺ เริ่มนับใหม่แล้ว — ตัวเลขจะขึ้นอีกครั้งในไม่กี่วินาที';if(was)start();else if(stream)readOnce();}
+  return {init,live,setTicker,readNow,seed,restart,_variants:k=>{const V=variants(regions[k]);return V?V.list.map(v=>({tag:v.tag,count:v.count,modeH:v.modeH,img:v.canvas.toDataURL()})):null;},hasRegions:()=>!!(regions.exp||regions.meso),hasAny:()=>Object.values(regions).some(Boolean),has:k=>!!regions[k],readWho,readMap,_readNow:readNow,reset:()=>{reset();render();},snapshot:()=>({expGained:st.expGained,mesoCollected:st.mesoCollected,t0:st.t0}),stop,drawBoxes,_parseExp:parseExp,_parseMeso:parseMeso,_st:st,_accExp:acceptExp,_reqNow:reqNow,_accMeso:acceptMeso};
 })();
 
+// two taps within 3 s → start counting again from what is on screen now (regions are kept)
+function armReset(btn,label,confirmLabel){if(!btn)return;let t=null;
+  btn.onclick=()=>{if(btn.classList.contains('armed')){clearTimeout(t);btn.classList.remove('armed');btn.textContent=label;OCR.restart();return;}
+    btn.classList.add('armed');btn.textContent=confirmLabel;t=setTimeout(()=>{btn.classList.remove('armed');btn.textContent=label;},3000);};}
 /* ===================== floating live window (Document Picture-in-Picture) ===================== */
 const PIP=(()=>{
   let w=null,tick=null;
@@ -1352,6 +1431,7 @@ body{font:14px/1.3 "Noto Sans Thai","Leelawadee UI",Tahoma,system-ui,sans-serif;
 .ft .clock{font:700 15px "Pixelify Sans",ui-monospace,monospace;letter-spacing:.5px}
 .dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:5px;background:#bbb;vertical-align:1px}
 .dot.on{background:#3fae4f;box-shadow:0 0 0 3px rgba(63,174,79,.25)}.warn{color:#bf3324}
+.rs{position:fixed;top:5px;right:64px;border:2px solid #0a0f24;background:#fff6e6;color:#141c3c;border-radius:6px;font:700 11px system-ui;padding:2px 6px;cursor:pointer;z-index:2}.rs.armed{background:#bf3324;color:#fff}body.compact .rs{right:64px}
 .tg{position:fixed;top:5px;right:5px;border:2px solid #0a0f24;background:#141c3c;color:#fff;border-radius:6px;font:700 11px system-ui;padding:2px 6px;cursor:pointer;z-index:2}
 .bar{display:none;align-items:center;gap:10px;height:100%;padding-right:46px;white-space:nowrap;overflow:hidden;font-weight:700;font-size:clamp(12px,3.2vw,17px)}
 .bar img{height:28px}.bar .v{font-weight:800}.bar .sep{color:#d0b48c}.bar .e{color:#2f7d3a}.bar .m{color:#a87405}.bar .t{color:#c0561a}
@@ -1360,7 +1440,7 @@ body.compact{padding:4px 8px;justify-content:center}body.compact .hd,body.compac
   const eta=ms=>{const m=Math.ceil(ms/60000);return m<60?`${m} นาที`:`${Math.floor(m/60)}ชม. ${m%60}น.`;};
   // LogBook Desktop: a real see-through overlay window instead of Picture-in-Picture
   const D=window.lbDesktop;let desk=false,deskTick=null;
-  if(D){D.onOverlayClosed(()=>{desk=false;clearInterval(deskTick);deskTick=null;setBtn();});D.onModeChanged(m=>{mode=m;try{localStorage.setItem('logbook-pip-mode',m);}catch(e){}});}
+  if(D){D.onReset?.(()=>OCR.restart());D.onOverlayClosed(()=>{desk=false;clearInterval(deskTick);deskTick=null;setBtn();});D.onModeChanged(m=>{mode=m;try{localStorage.setItem('logbook-pip-mode',m);}catch(e){}});}
   const isOpen=()=>desk||!!(w&&!w.closed);
   // short, actionable status for each number
   function noteText(L,k){const has=k==='exp'?L.hasExp:L.hasMeso,err=k==='exp'?L.errExp:L.errMeso;
@@ -1389,8 +1469,9 @@ body.compact{padding:4px 8px;justify-content:center}body.compact .hd,body.compac
     const d=w.document;d.title='LogBook · สด';
     d.head.innerHTML=`<meta charset="utf-8"><style>${CSS}</style>`;
     document.querySelectorAll('link[rel=stylesheet]').forEach(l=>d.head.appendChild(l.cloneNode()));
-    d.body.innerHTML=`<button class="tg" id="tg" title="สลับแบบเต็ม / แถบเล็ก"></button><div class="hd"><img class="bk" alt="" src="${LOGO_IMG.book}"><img class="wm" alt="LogBook" src="${LOGO_IMG.word}"></div><div class="g" id="g"></div><div class="ft" id="ft"></div><div class="bar" id="bar"></div>`;
+    d.body.innerHTML=`<button class="rs" id="rs" title="เริ่มนับใหม่จากตอนนี้ (กด 2 ครั้ง)">↺</button><button class="tg" id="tg" title="สลับแบบเต็ม / แถบเล็ก"></button><div class="hd"><img class="bk" alt="" src="${LOGO_IMG.book}"><img class="wm" alt="LogBook" src="${LOGO_IMG.word}"></div><div class="g" id="g"></div><div class="ft" id="ft"></div><div class="bar" id="bar"></div>`;
     d.getElementById('tg').onclick=()=>{setMode(mode==='compact'?'full':'compact');try{w.resizeTo(...SIZE[mode]);}catch(e){}};
+    armReset(d.getElementById('rs'),'↺','กดอีกครั้ง');
     setMode(mode);
     OCR.setTicker(w);
     tick=w.setInterval(update,1000);
@@ -1526,7 +1607,7 @@ async function startSession(){
   const m=mapOf(mapId);
   active={id:uid(),schema:SCHEMA,charId:ch.id,charName:ch.name,job:ch.job,branch:ch.branch,mapId,mapName:m.name,party:Math.max(1,num($('s_party').value)||1),
     startTime:Date.now(),endTime:null,start:st,items,checks:[],startNote:$('s_note').value.trim()};
-  await put('kv',active,'active');OCR.reset();
+  await put('kv',active,'active');OCR.reset();OCR.seed({level:st.level,exp:st.exp,pct:st.pct,mesos:st.mesos},active.startTime);
   fillCharSelect($('s_char'),ch.id);$('s_newCharBox').style.display='none';$('nc_name').value='';
   currentJob=ch.job;renderJobRow();
   if(stream)await saveShot('start','เริ่มผจญภัย');
@@ -1599,7 +1680,7 @@ async function cancelSession(){
 }
 function showActive(){
   $('startCard').style.display=active?'none':'';$('activeArea').style.display=active?'':'none';$('liveGrid').style.display=active?'':'none';
-  if(active)EW.reset();else{whoSeen=null;mapSeen=null;$('whoNote').innerHTML='';$('mapNote').innerHTML='';SW.reset();}mountBlocks();
+  if(active)EW.reset();else{whoSeen=null;mapSeen=null;$('whoNote').innerHTML='';$('mapNote').innerHTML='';$('detectAll').innerHTML='';SW.reset();}mountBlocks();
   clearInterval(tickTimer);if(active)tickTimer=setInterval(renderLive,30000);renderLive();
 }
 async function renderLive(){
@@ -1661,6 +1742,30 @@ async function detectMap(){
   let r;try{r=await OCR.readMap(allMaps());}catch(e){box.innerHTML='⚠️ '+esc(e.message);return;}
   if(r?.map){mapSeen=r.map;setStartMap(r.map.id);box.innerHTML=`🔎 อ่านจากจอ: <b>${esc(r.map.name)}</b> — เลือกให้แล้ว ✓ <span class="muted small">(ไม่ใช่? ค้นหาแมพอื่นด้านล่างได้)</span>`;}
   else box.innerHTML=`⚠️ อ่านชื่อแมพแล้วไม่พบในรายการ${r?.raw?` <span class="muted small">(อ่านได้: ${esc(r.raw)})</span>`:''} — ค้นหาเองด้านล่าง หรือเพิ่มแมพใหม่ได้`;
+}
+
+/* ---- read everything the screen shows as soon as it is shared, and use it to fill the whole setup ---- */
+async function detectAll(){
+  const box=$('detectAll');if(active||!stream||!OCR.hasAny()){box.innerHTML='';return;}
+  box.innerHTML='<p class="muted small" style="margin:0">⏳ กำลังอ่านชื่อ เลเวล แมพ EXP และเงินจากจอ…</p>';
+  try{
+    if(OCR.has('who'))await detectWho();
+    if(OCR.has('map'))await detectMap();
+    let r=null;if(OCR.hasRegions()){r=await OCR.readNow();
+      const set=(id,v)=>{if(v==null)return;const el=$(id);if(el.value===''||el.dataset.auto==='1'){el.value=v;el.dataset.auto='1';}};
+      if(r.exp){set('s_exp',r.exp.exp);set('s_pct',r.exp.pct);}set('s_mesos',r.meso);}
+    const ch=$('s_char').value==='__new'?{name:$('nc_name').value}:charOf($('s_char').value),m=mapOf($('s_map').value);
+    const row=(k,v,ok)=>`<span>${k}</span><span>${v?`${v} ${ok===false?'':'✓'}`:'<span class="muted">อ่านไม่ได้ — กรอกเองในขั้นนั้น</span>'}</span>`;
+    box.innerHTML=`<h4>🔎 อ่านจากจอได้</h4><div class="grid2">
+      ${OCR.has('who')?row('ตัวละคร',ch?.name?esc(ch.name)+($('s_char').value==='__new'?' <span class="tag">ใหม่</span>':''):null):''}
+      ${OCR.has('who')?row('เลเวล',$('s_level').value?'Lv.'+esc($('s_level').value):null):''}
+      ${OCR.has('map')?row('แมพ',m?esc(m.name):null):''}
+      ${OCR.has('exp')?row('EXP',r?.exp?`${fmt(r.exp.exp)}${r.exp.pct!=null?` (${r.exp.pct}%)`:''}`:null):''}
+      ${OCR.has('meso')?row('เงิน',r?.meso!=null?fmt(r.meso)+' mesos':null):''}</div>
+      <div class="row" style="margin-top:10px"><button type="button" class="btn sm" id="detGo">✔ ถูกต้อง ข้ามไปเลือกยาเลย</button><button type="button" class="btn ghost sm" id="detAgain">อ่านใหม่</button>
+      <span class="muted small">ไม่ตรง? กด Next ไปตรวจทีละขั้นได้</span></div>`;
+    $('detGo').onclick=()=>SW.goKey('items');$('detAgain').onclick=()=>{whoSeen=null;mapSeen=null;detectAll();};
+  }catch(e){box.innerHTML=`<p class="bad small">⚠️ ${esc(e.message)}</p>`;}
 }
 
 /* ===================== step-by-step wizards ===================== */

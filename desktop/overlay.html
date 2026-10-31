@@ -37,6 +37,7 @@ body.ct .ctn{display:block}body.compact .ctn{bottom:auto;top:2px;left:auto;right
 </div>
 <div class="ctl">
   <label>ความใส</label><input type="range" id="bg" min="0" max="100" title="ความทึบของพื้นหลัง">
+  <button id="rs" title="เริ่มนับใหม่จากตอนนี้ (กด 2 ครั้ง)">↺</button>
   <button id="md" title="สลับแบบเต็ม / แถบเล็ก"></button>
   <button id="ck" title="คลิกทะลุ (กด Ctrl+Shift+L อีกครั้งเพื่อปิด)">👆</button>
   <button id="x" title="ปิดหน้าต่างลอย">✕</button>
@@ -62,6 +63,7 @@ ov.onStats(s=>{last=s;draw();});
 ov.onClick(on=>document.body.classList.toggle('ct',on));
 $('bg').oninput=e=>{const v=e.target.value/100;setBg(v);ov.setBg(v);};
 $('md').onclick=()=>ov.setMode(mode==='compact'?'full':'compact');
+{let t=null;const b=$('rs');b.onclick=()=>{if(b.dataset.armed){delete b.dataset.armed;b.textContent='↺';clearTimeout(t);ov.reset();return;}b.dataset.armed='1';b.textContent='อีกครั้ง';t=setTimeout(()=>{delete b.dataset.armed;b.textContent='↺';},3000);};}
 $('ck').onclick=()=>ov.toggleClick();$('x').onclick=()=>ov.close();
 draw();
 </script>

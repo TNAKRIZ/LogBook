@@ -73,6 +73,7 @@ ipcMain.on('ov:mode',(e,m)=>setMode(m));
 ipcMain.on('ov:stats',(e,s)=>{if(overlay&&!overlay.isDestroyed())overlay.webContents.send('ov:stats',s);});
 ipcMain.on('ov:bg',(e,v)=>{prefs.bg=Math.max(0,Math.min(1,+v||0));savePrefs();});
 ipcMain.on('ov:click',()=>toggleClickThrough());
+ipcMain.on('ov:reset',()=>win?.webContents.send('ov:reset'));
 
 app.whenReady().then(()=>{
   // the LogBook page asks for the game screen with getDisplayMedia — answer it with our own picker
