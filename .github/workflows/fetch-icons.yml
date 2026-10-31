@@ -1,0 +1,50 @@
+name: Fetch item icons
+
+# Downloads the real in-game icon for every ID in assets/icon-ids.txt
+# from MeowDB (credited in README) into assets/icons/<id>.png and commits them.
+on:
+  push:
+    branches: [main]
+    paths: ['assets/icon-ids.txt', '.github/workflows/fetch-icons.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  icons:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download missing icons
+        run: |
+          mkdir -p assets/icons assets/_probe
+          ok=0; miss=0
+          for id in $(grep -E '^[0-9]+$' assets/icon-ids.txt); do
+            f="assets/icons/$id.png"
+            [ -s "$f" ] && continue
+            if curl -fsSL -A "LogBook-icon-fetch (github.com/TNAKRIZ/LogBook)" -o "$f.tmp" "https://meowdb.com/msclassic/api/assets/icons/$id" \
+               && file "$f.tmp" | grep -qiE 'PNG|GIF|WebP|image'; then
+              mv "$f.tmp" "$f"; ok=$((ok+1))
+            else
+              rm -f "$f.tmp"; echo "$id" >> assets/icons/_missing.txt; miss=$((miss+1))
+            fi
+            sleep 0.3
+          done
+          echo "downloaded=$ok missing=$miss"
+          file assets/icons/* | head -5
+      - name: Probe item data endpoints (temporary)
+        run: |
+          curl -fsSL -A "LogBook-icon-fetch" -o assets/_probe/item-294.html "https://meowdb.com/msclassic/item-db/294" || true
+          grep -oE '"/[^"]*api[^"]*"|https://meowdb.com/[^"]*api[^"]*' assets/_probe/item-294.html | sort -u > assets/_probe/api-paths.txt || true
+          grep -oE '/_next/static/[^"]+\.js' assets/_probe/item-294.html | sort -u | head -40 > assets/_probe/js.txt || true
+          for js in $(head -40 assets/_probe/js.txt); do curl -fsSL "https://meowdb.com$js" | grep -oE '"/?msclassic/api/[^"]*"|`/?msclassic/api/[^`]*`|/api/[a-zA-Z0-9_/-]+' ; done | sort -u > assets/_probe/js-api.txt || true
+          wc -l assets/_probe/*
+      - name: Commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add assets
+          git diff --cached --quiet && { echo "nothing new"; exit 0; }
+          git commit -m "Fetch item icons from MeowDB"
+          git push
