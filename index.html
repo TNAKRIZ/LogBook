@@ -1064,9 +1064,11 @@ const OCR=(()=>{
     let modeH=live[0].h,mid=(live[0].y0+live[0].y1)/2,bestN=0;
     for(const c of live){const cy0=(c.y0+c.y1)/2;const k=live.filter(o=>o.h>=c.h*0.8&&o.h<=c.h*1.25&&Math.abs((o.y0+o.y1)/2-cy0)<=c.h*0.35).length;
       if(k>bestN||(k===bestN&&c.h>modeH)){bestN=k;modeH=c.h;mid=cy0;}}
-    live=live.filter(c=>c.h>=modeH*0.6&&c.h<=modeH*1.45&&Math.abs((c.y0+c.y1)/2-mid)<=modeH*0.6).sort((a,b)=>a.x0-b.x0);
+    live=live.filter(c=>c.h>=modeH*0.72&&c.h<=modeH*1.45&&Math.abs((c.y0+c.y1)/2-mid)<=modeH*0.6).sort((a,b)=>a.x0-b.x0);
     if(!live.length)return null;
     const top=mid-modeH/2,lineX0=live[0].x0,lineX1=live[live.length-1].x1;
+    // glyphs that start in the lower half of the line are commas/dots (thick outlined fonts make them big enough to pass the size filter)
+    live=live.filter(c=>c.y0-top<=modeH*0.4);if(!live.length)return null;
     // decimal points: small blobs sitting on the baseline inside the text line (commas are removed the same way, they never get drawn)
     const dots=comps.filter(c=>c&&c.x0>0&&c.y0>0&&c.x1<W-1&&c.y1<H-1&&c.h<modeH*0.42&&c.w<modeH*0.5&&c.area>=scale*scale*0.8
       &&c.y0>=top+modeH*0.55&&c.y1<=top+modeH*1.25&&c.x0>lineX0&&c.x1<lineX1);
@@ -1081,9 +1083,12 @@ const OCR=(()=>{
     // "[" / "(" before the percentage: a narrow glyph taller than the digits
     // In MapleStory Classic the brackets around the % are coloured (green) while the digits are white,
     // so a strongly coloured glyph is the most reliable split point; a narrow tall glyph is the fallback.
-    const isAccent=c=>c.sat>0.35,isTallNarrow=c=>c.w<=c.h*0.5&&c.h>=modeH*1.05;
-    const neutral=live.filter(c=>!isAccent(c)).length;
-    const isBr=neutral>=2&&live.some(isAccent)?isAccent:isTallNarrow;
+    const mh=[...live.map(c=>c.h)].sort((a,b)=>a-b)[live.length>>1];   // typical glyph height on this line
+    // coloured = clearly more saturated than the rest of the line (edges that pick up a coloured background don't count)
+    const sats=live.map(c=>c.sat).sort((a,b)=>a-b),satMed=sats[sats.length>>1];
+    const isAccent=c=>c.sat>0.5&&c.sat>satMed+0.3&&c.w<=c.h*0.7,isTallNarrow=c=>c.w<=c.h*0.5&&c.h>=Math.max(modeH*1.05,mh*1.12);   // a bracket is taller than the digits, a "1" is not
+    const nAcc=live.filter(isAccent).length;
+    const isBr=nAcc>=1&&nAcc<=3&&live.length-nAcc>=2?isAccent:isTallNarrow;
     const br=live.findIndex((c,i)=>i>=2&&isBr(c));
     let num=null,pct=null;
     if(br>0){const b=live[br];num=paint(live.slice(0,br));
