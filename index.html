@@ -955,7 +955,7 @@ const OCR=(()=>{
   let worker=null,loading=null,timer=null,busy=false,drawMode=null,dragStart=null;
   let regions={exp:null,meso:null};          // normalised {x,y,w,h} in video-frame space
   const st={};                                // live state
-  function reset(){Object.assign(st,{expCand:null,mesoCand:null,t0:null,exp:null,pct:null,meso:null,expGained:0,mesoCollected:0,expHist:[],mesoHist:[],lastExpT:null,lastMesoT:null,errExp:0,errMeso:0,black:false,log:[]});}
+  function reset(){Object.assign(st,{expCand:null,mesoCand:null,t0:null,exp:null,pct:null,meso:null,expGained:0,mesoCollected:0,expHist:[],mesoHist:[],lastExpT:null,lastMesoT:null,errExp:0,errMeso:0,black:false,log:[],reqs:[],expWin:[],mesoWin:[],expRej:[],mesoRej:[]});}
   reset();
   const ov=()=>$('ocrOverlay');
   /* ---- region drawing ---- */
@@ -1123,29 +1123,54 @@ const OCR=(()=>{
       if(sc>bs){bs=sc;best=r;}}
     return best||res[0]||null;
   }
-  /* ---- accept/reject + accumulate ---- */
-  function acceptExp(v,t){
-    if(!v||!isFinite(v.exp))return false;
-    if(st.exp==null){ // need two consistent reads before trusting a baseline
-      const c=st.expCand;st.expCand=v;
-      if(!c||v.exp<c.exp||(v.pct!=null&&c.pct!=null&&Math.abs(v.pct-c.pct)>5)||v.exp-c.exp>Math.max(1,c.exp)*0.2)return false;
-      st.exp=v.exp;st.pct=v.pct;st.t0=st.t0||t;st.lastExpT=t;st.expHist.push({t,c:0});return true;}
-    const req=v.pct>0?v.exp/(v.pct/100):(st.pct>0?st.exp/(st.pct/100):null);
-    let gain=v.exp-st.exp;
-    if(gain<0){ // level-up: % falls from high to low
-      if(st.pct!=null&&v.pct!=null&&st.pct>60&&v.pct<40){const reqOld=st.exp/(st.pct/100);gain=(reqOld-st.exp)+v.exp;}else return false;}
-    if(req&&gain>req*0.2)return false;          // >20% of a level in one read = misread
-    st.exp=v.exp;st.pct=v.pct??st.pct;st.expGained+=gain;st.lastExpT=t;st.expHist.push({t,c:st.expGained});
+  /* ---- accept/reject + accumulate ----
+     One misread must never poison the totals:
+     • a number is only used after the median of its last 3 reads (one odd read is outvoted)
+     • the EXP needed for this level (EXP ÷ %) is learned from the reads; a value is trusted only when most reads agree on it,
+       a read with more EXP than the whole level is rejected, and a % that disagrees with it is ignored (the % is then derived)
+     • if the baseline itself was a misread, 3 later reads that agree with each other replace it — the jump is never counted */
+  const med=a=>{const s=[...a].sort((x,y)=>x-y);return s.length?s[s.length>>1]:null;};
+  function reqNow(){ // the value most samples agree on (±1.5%), needs at least 3 agreeing samples
+    let best=null,n=0;for(const r of st.reqs){const k=st.reqs.filter(o=>Math.abs(o-r)/r<=0.015).length;if(k>n){n=k;best=r;}}
+    return n>=3?med(st.reqs.filter(o=>Math.abs(o-best)/best<=0.015)):null;}
+  function cleanExp(v){
+    if(!v||!isFinite(v.exp)||v.exp<=0)return null;v={exp:v.exp,pct:v.pct};
+    if(v.pct!=null&&v.pct>=0.3){const r=v.exp/(v.pct/100);st.reqs.push(r);if(st.reqs.length>20)st.reqs.shift();}
+    const R=reqNow();
+    if(R){if(v.exp>R*1.01)return null;                                  // more EXP than the level = misread
+      if(v.pct!=null&&Math.abs(v.exp/(v.pct/100)-R)/R>0.015)v.pct=null;   // % misread → derive it from EXP
+      if(v.pct==null)v.pct=+(v.exp/R*100).toFixed(2);}
+    return v;
+  }
+  function smooth(win,val){win.push(val);if(win.length>3)win.shift();return win.length<3?null:med(win);}
+  function rebaseIfStuck(rej,val,t,tol,apply){ // 3 rejected reads that agree with each other = the old baseline was wrong
+    rej.push({val,t});if(rej.length>3)rej.shift();
+    if(rej.length===3&&rej.every((r,i)=>!i||(r.val>=rej[i-1].val-tol&&r.val-rej[i-1].val<=tol*4))){apply(rej[2].val);rej.length=0;return true;}
+    return false;
+  }
+  function acceptExp(raw,t){
+    const v=cleanExp(raw);if(!v)return false;
+    const e=smooth(st.expWin,v.exp);if(e==null)return st.exp==null?false:false;
+    const pct=v.pct!=null&&v.exp===e?v.pct:(reqNow()?+(e/reqNow()*100).toFixed(2):v.pct);
+    if(st.exp==null){st.exp=e;st.pct=pct;st.t0=st.t0||t;st.lastExpT=t;st.expHist.push({t,c:0});return true;}
+    const R=reqNow()||(st.pct>0?st.exp/(st.pct/100):null);
+    let gain=e-st.exp;
+    if(gain<0&&st.pct!=null&&pct!=null&&st.pct>60&&pct<40&&R)gain=(R-st.exp)+e;   // level-up
+    const ok=gain>=0&&(!R||gain<=R*0.2);                                         // ≤20% of a level per read
+    if(!ok){rebaseIfStuck(st.expRej,e,t,R?R*0.02:5000,val=>{st.exp=val;st.pct=reqNow()?+(val/reqNow()*100).toFixed(2):pct;st.lastExpT=t;});return false;}
+    st.expRej.length=0;st.exp=e;st.pct=pct??st.pct;st.expGained+=gain;st.lastExpT=t;st.expHist.push({t,c:st.expGained});
     return true;
   }
   function acceptMeso(v,t){
     if(v==null||!isFinite(v))return false;
-    if(st.meso==null){const c=st.mesoCand;st.mesoCand=v;if(c==null||Math.abs(v-c)>Math.max(20000,c*0.05))return false;
-      st.meso=v;st.t0=st.t0||t;st.lastMesoT=t;st.mesoHist.push({t,c:0});return true;}
-    const d=v-st.meso;
-    if(Math.abs(d)>Math.max(500000,st.meso*0.5))return false;   // implausible jump = misread
+    if(String(v).length<3&&!(st.meso!=null&&Math.abs(v-st.meso)<1000))return false;   // "1", "41" … = a stray mark
+    const m=smooth(st.mesoWin,v);if(m==null)return false;
+    if(st.meso==null){st.meso=m;st.t0=st.t0||t;st.lastMesoT=t;st.mesoHist.push({t,c:0});return true;}
+    const d=m-st.meso;
+    if(Math.abs(d)>Math.max(300000,st.meso*0.3)){rebaseIfStuck(st.mesoRej,m,t,Math.max(5000,m*0.01),val=>{st.meso=val;st.lastMesoT=t;});return false;}
+    st.mesoRej.length=0;
     if(d>0)st.mesoCollected+=d;                 // only pick-ups count (purchases are ignored)
-    st.meso=v;st.lastMesoT=t;st.mesoHist.push({t,c:st.mesoCollected});return true;
+    st.meso=m;st.lastMesoT=t;st.mesoHist.push({t,c:st.mesoCollected});return true;
   }
   const perMin=hist=>{const now=Date.now(),win=hist.filter(h=>now-h.t<=60000);if(win.length<2)return null;const a=win[0],b=win[win.length-1];return b.t>a.t?(b.c-a.c)/((b.t-a.t)/60000):null;};
   const perHr=(total,t0)=>t0&&Date.now()-t0>30000?total/((Date.now()-t0)/3.6e6):null;
@@ -1170,7 +1195,7 @@ const OCR=(()=>{
       const okE=regions.exp&&!r.black&&acceptExp(r.exp,t),okM=regions.meso&&!r.black&&acceptMeso(r.meso,t);
       if(regions.exp){if(okE)st.errExp=0;else st.errExp++;st.rawExp=r.rawExp;}
       if(regions.meso){if(okM)st.errMeso=0;else st.errMeso++;st.rawMeso=r.rawMeso;}
-      const stat=(ok,val,base)=>ok?'ok':(val!=null&&base==null&&!r.black?'wait':'no');
+      const stat=(ok,val,base)=>ok?'ok':(val!=null&&!r.black&&(base==null||(val===r.exp?st.expRej.length:st.mesoRej.length))?'wait':'no');
       st.log.push({t,r,okE:stat(okE,r.exp,st.exp),okM:stat(okM,r.meso,st.meso)});if(st.log.length>6)st.log.shift();
       renderLog();render();autofill();
       if(r.black)$('ocrHint').innerHTML='⚠️ <b>ภาพที่แชร์เป็นจอดำ</b> — เกมที่เปิดเต็มจอจริงมักจับภาพไม่ได้ ลองเปลี่ยนเกมเป็นโหมดหน้าต่าง หรือเต็มจอแบบไม่มีขอบ (borderless) แล้วแชร์ใหม่';
@@ -1188,7 +1213,7 @@ const OCR=(()=>{
   }
   function render(){
     const eMin=perMin(st.expHist),eHr=perHr(st.expGained,st.t0),mMin=perMin(st.mesoHist),mHr=perHr(st.mesoCollected,st.t0);
-    const req=st.pct>0?st.exp/(st.pct/100):null;const left=req?req-st.exp:null;const rate=eHr||(eMin?eMin*60:null);
+    const req=reqNow()||(st.pct>0?st.exp/(st.pct/100):null);const left=req?req-st.exp:null;const rate=eHr||(eMin?eMin*60:null);
     const warn=n=>n>=3?' <span class="bad sub">อ่านไม่ได้ '+n+' ครั้ง</span>':'';
     $('ocrStats').innerHTML=
       stat('EXP ตอนนี้',`${fmt(st.exp)}${st.pct!=null?` <span class="sub">${st.pct}%</span>`:''}${warn(st.errExp)}`)+
@@ -1208,7 +1233,7 @@ const OCR=(()=>{
   }
   function live(){
     const eMin=perMin(st.expHist),eHr=perHr(st.expGained,st.t0),mMin=perMin(st.mesoHist),mHr=perHr(st.mesoCollected,st.t0);
-    const req=st.pct>0?st.exp/(st.pct/100):null,rate=eHr||(eMin?eMin*60:null),left=req?req-st.exp:null;
+    const req=reqNow()||(st.pct>0?st.exp/(st.pct/100):null),rate=eHr||(eMin?eMin*60:null),left=req?req-st.exp:null;
     return {on:!!timer,exp:st.exp,pct:st.pct,expHr:rate,pctHr:req&&rate?rate/req*100:null,eta:left!=null&&rate?left/rate*3.6e6:null,
       mesoHr:mHr||(mMin?mMin*60:null),t0:st.t0,errExp:st.errExp,errMeso:st.errMeso,hasExp:!!regions.exp,hasMeso:!!regions.meso,black:!!st.black};
   }
@@ -1231,7 +1256,7 @@ const OCR=(()=>{
     video.addEventListener('loadedmetadata',()=>drawBoxes());
     render();
   }
-  return {init,live,setTicker,readNow,hasRegions:()=>!!(regions.exp||regions.meso),_readNow:readNow,reset:()=>{reset();render();},snapshot:()=>({expGained:st.expGained,mesoCollected:st.mesoCollected,t0:st.t0}),stop,drawBoxes,_parseExp:parseExp,_parseMeso:parseMeso,_st:st,_accExp:acceptExp,_accMeso:acceptMeso};
+  return {init,live,setTicker,readNow,hasRegions:()=>!!(regions.exp||regions.meso),_readNow:readNow,reset:()=>{reset();render();},snapshot:()=>({expGained:st.expGained,mesoCollected:st.mesoCollected,t0:st.t0}),stop,drawBoxes,_parseExp:parseExp,_parseMeso:parseMeso,_st:st,_accExp:acceptExp,_reqNow:reqNow,_accMeso:acceptMeso};
 })();
 
 /* ===================== floating live window (Document Picture-in-Picture) ===================== */
