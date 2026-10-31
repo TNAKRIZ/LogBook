@@ -1,0 +1,11 @@
+"/msclassic/api/assets/icons/2070000"
+"/msclassic/api/assets/icons/2070000\"
+"/msclassic/api/assets/icons/2070006"
+"/msclassic/api/assets/icons/2070006\"
+"/msclassic/api/assets/icons/2070007"
+"/msclassic/api/assets/icons/2070007\"
+"/msclassic/api/assets/icons/2070008"
+"/msclassic/api/assets/icons/2070008\"
+"/msclassic/api/avatar-catalog-previews/v1/preset/male/10.png"
+https://meowdb.com/msclassic/api/assets/icons/2070000
+https://meowdb.com/msclassic/api/assets/icons/2070000\\\
