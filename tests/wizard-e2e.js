@@ -1,0 +1,57 @@
+const {chromium}=require('playwright');const fs=require('fs');
+(async()=>{
+  const S=process.env.S;const b=await chromium.launch();const ctx=await b.newContext({viewport:{width:1280,height:900},reducedMotion:'reduce'});const p=await ctx.newPage();
+  const errs=[];p.on('pageerror',e=>errs.push(e.message));p.on('console',m=>{if(m.type()==='error'&&!/net::|fonts/.test(m.text()))errs.push(m.text())});
+  p.on('dialog',async d=>{console.log('DIALOG:',d.message().replace(/\n/g,' | '));await d.accept();});
+  await p.goto('http://localhost:8123/index.html');await p.waitForTimeout(800);
+  const err=async()=>await p.textContent('#sw_err');
+  const step=async()=>await p.textContent('#sw_steps li.on');
+  console.log('step:',await step());
+  await p.click('#sw_next');console.log('next w/o name ->',await err());
+  await p.fill('#nc_name','TNAKRIZ');await p.click('#nc_job label:has(input[value=magician])');await p.selectOption('#nc_branch','Cleric');
+  await p.setInputFiles('#nc_avatar',S+'/avatar_test.png');await p.waitForTimeout(400);
+  await p.screenshot({path:S+'/w1.png'});
+  await p.click('#sw_next');console.log('step:',await step());
+  await p.click('#sw_next');console.log('next w/o map ->',await err());
+  await p.click('#s_mapq');await p.fill('#s_mapq','tomb 3');await p.keyboard.press('Enter');await p.waitForTimeout(200);
+  await p.screenshot({path:S+'/w2.png'});
+  await p.click('#sw_next');console.log('step:',await step(),'screenBlock in step3:',await p.evaluate(()=>!!document.querySelector('.wstep.on #screenBlock')));
+  await p.screenshot({path:S+'/w3.png'});
+  await p.click('#sw_next');console.log('step:',await step(),'ocr in step4:',await p.evaluate(()=>!!document.querySelector('.wstep.on #ocrBlock')));
+  await p.waitForTimeout(300);await p.screenshot({path:S+'/w4.png'});
+  await p.click('#sw_next');console.log('step:',await step());
+  await p.click('#sw_next');console.log('next w/o stats ->',await err());
+  await p.fill('#s_level','61');await p.fill('#s_exp','401304');await p.fill('#s_pct','31.44');await p.fill('#s_mesos','302957');
+  await p.click('#sw_next');console.log('step:',await step());
+  for(const [id,q] of [['2010005','1326'],['2002001','5'],['2000002','273']]){await p.click(`.pick[data-id="${id}"] input[type=checkbox]`);await p.fill(`.pick[data-id="${id}"] input[type=number]`,q);}
+  await p.screenshot({path:S+'/w6.png'});
+  await p.click('#sw_next');console.log('step:',await step());
+  await p.click('#pipModes label:has(input[value=compact])');
+  await p.screenshot({path:S+'/w7.png'});await p.click('#glassGuide summary');await p.screenshot({path:S+'/w7b.png',fullPage:true});
+  await p.click('#sw_next');console.log('step:',await step());
+  await p.screenshot({path:S+'/w8.png'});
+  // jump back via stepper then forward via stepper
+  await p.click('#sw_steps li[data-n="1"]');console.log('jumped:',await step());await p.click('#sw_steps li[data-n="7"]');console.log('jumped fwd:',await step());
+  await p.click('#btnStart');await p.waitForTimeout(300);
+  console.log('active?',await p.evaluate(()=>!!active),'screenBlock top:',await p.evaluate(()=>!!document.querySelector('#screenHostTop #screenBlock')));
+  await p.evaluate(async()=>{active.startTime-=2*3.6e6;await put('kv',active,'active');});
+  await p.screenshot({path:S+'/w9.png',fullPage:true});
+  const eerr=async()=>await p.textContent('#ew_err'),estep=async()=>await p.textContent('#ew_steps li.on');
+  await p.click('#ew_next');console.log('end next w/o ->',await eerr());
+  await p.fill('#e_exp','671304');await p.fill('#e_pct','52.6');await p.fill('#e_mesos','582957');
+  await p.click('#ew_next');console.log('estep:',await estep());
+  await p.click('#ew_next');console.log('end potions w/o ->',await eerr());
+  for(const r of await p.$$('#e_items tr[data-id]')){const id=await r.getAttribute('data-id');await (await r.$('.ie')).fill({'2010005':'1050','2002001':'2','2000002':'480'}[id]);}
+  await p.click('#ew_next');await p.click('#e_drops .drop-row[data-id="1050031"] button[data-d="1"]');
+  await p.click('#ew_next');await p.fill('#e_etc .drop-row[data-id="4000155"] .dq','120');await p.fill('#e_etc .drop-row[data-id="4000154"] .dq','40');
+  await p.click('#ew_next');console.log('estep:',await estep());
+  console.log('END REVIEW:',(await p.innerText('#e_review')).replace(/\n/g,' | ').slice(0,400));
+  await p.screenshot({path:S+'/w10.png'});
+  await p.click('#btnEnd');await p.waitForTimeout(500);
+  console.log('after end step:',await step(),'charcards:',(await p.innerText('#charCards')).replace(/\n/g,' | '));
+  await p.click('nav button[data-t=history]');await p.click('details.sess summary');await p.waitForTimeout(300);
+  await p.click('[data-share]');await p.waitForTimeout(1200);
+  const data=await p.evaluate(()=>document.getElementById('shareCanvas').toDataURL('image/png'));
+  fs.writeFileSync(S+'/w-share.png',Buffer.from(data.split(',')[1],'base64'));
+  console.log('ERRORS:',errs);await b.close();
+})();

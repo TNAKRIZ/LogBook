@@ -1,0 +1,10 @@
+<!doctype html><html lang="th"><head><meta charset="utf-8"><title>เลือกหน้าจอเกม</title>
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src data:; style-src 'unsafe-inline'; script-src 'unsafe-inline'">
+<style>body{margin:0;font:14px system-ui,"Noto Sans Thai",sans-serif;background:#fbf3e4;color:#3a2817;padding:16px}h1{font-size:18px;margin:0 0 4px}p{margin:0 0 12px;color:#8a6c50}
+.g{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:10px}.s{border:2px solid #ecd8b8;border-radius:10px;background:#fffaf1;padding:6px;cursor:pointer;text-align:left;font:inherit;color:inherit}
+.s:hover,.s:focus{border-color:#c4560a;outline:none}.s img{width:100%;aspect-ratio:16/9;object-fit:contain;background:#000;border-radius:6px;display:block}.s span{display:block;margin-top:4px;font-size:12.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.f{margin-top:14px;text-align:right}button.c{border:2px solid #ecd8b8;background:#fffaf1;border-radius:6px;padding:6px 14px;font:inherit;cursor:pointer}</style></head>
+<body><h1>เลือกหน้าต่างเกม MapleStory</h1><p>เลือกหน้าต่างเกม (แนะนำ) หรือทั้งหน้าจอ</p><div class="g" id="g"></div><div class="f"><button class="c" onclick="pk.choose(null)">ยกเลิก</button></div>
+<script>pk.onList(l=>{const g=document.getElementById('g');l.sort((a,b)=>(/maple/i.test(b.name)-/maple/i.test(a.name)));
+for(const s of l){const b=document.createElement('button');b.className='s';b.innerHTML='<img alt=""><span></span>';b.querySelector('img').src=s.thumb;b.querySelector('span').textContent=s.name;b.onclick=()=>pk.choose(s.id);g.appendChild(b);}
+g.querySelector('.s')?.focus();});</script></body></html>
