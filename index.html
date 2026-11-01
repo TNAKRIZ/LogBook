@@ -1145,7 +1145,27 @@ const OCR=(()=>{
       const xEnd=close>=0?after[close].x0:1e9;
       pct=paint([...rest,...dots.filter(d=>d.x0>b.x1&&d.x1<xEnd)]);}
     const box={x0:Math.min(...live.map(c=>c.x0)),x1:Math.max(...live.map(c=>c.x1)),y0:Math.min(...live.map(c=>c.y0)),y1:Math.max(...live.map(c=>c.y1))};
-    return {canvas:paint(live),num,pct,count:live.length,modeH,box,W,H};
+    // glyph shapes for the digit templates: 8×12 grid of each glyph's own pixels + its width/height
+    // small captures make neighbouring digits touch ("37" as one blob): split a glyph that is as wide as several digits
+    // at its thinnest columns, so every piece is one digit
+    const okW=live.filter(c=>c.w/c.h>0.45&&c.w/c.h<0.9).map(c=>c.w).sort((x,y)=>x-y),digW=okW.length?okW[okW.length>>1]:modeH*0.62;
+    const pieces=c=>{const id=idx.get(c),n=Math.round(c.w/digW);if(n<2||c.w<digW*1.6)return [{c,xa:c.x0,xb:c.x1}];
+      const col=[];for(let x=c.x0;x<=c.x1;x++){let k=0;for(let y=c.y0;y<=c.y1;y++)if(lab[y*W+x]===id)k++;col.push(k);}
+      const cuts=[];for(let j=1;j<n;j++){const at=Math.round(c.w*j/n),r=Math.max(1,Math.round(digW*0.3));let bx=at,bv=1e9;
+        for(let x=Math.max(1,at-r);x<=Math.min(c.w-2,at+r);x++)if(col[x]<bv){bv=col[x];bx=x;}cuts.push(bx);}
+      const out=[];let s0=0;for(const cx of [...cuts,c.w]){out.push({c,xa:c.x0+s0,xb:c.x0+cx-(cx===c.w?1:0)});s0=cx+(cx===c.w?0:1);}return out;};
+    // glyph shapes for the digit templates: 8×12 grid of each piece's own pixels (cropped to its ink) + its width/height
+    const shape=({c,xa,xb})=>{const id=idx.get(c),GW=8,GH=12;let y0=1e9,y1=-1,x0=1e9,x1=-1;
+        for(let y=c.y0;y<=c.y1;y++)for(let x=xa;x<=xb;x++)if(lab[y*W+x]===id){if(y<y0)y0=y;if(y>y1)y1=y;if(x<x0)x0=x;if(x>x1)x1=x;}
+        if(x1<0)return {b:'0'.repeat(96),a:0};const w=x1-x0+1,h=y1-y0+1;let b='';
+        for(let gy=0;gy<GH;gy++)for(let gx=0;gx<GW;gx++){let on=0,t=0;
+          const ya=y0+Math.floor(gy*h/GH),yb=Math.max(ya+1,y0+Math.floor((gy+1)*h/GH)),xa2=x0+Math.floor(gx*w/GW),xb2=Math.max(xa2+1,x0+Math.floor((gx+1)*w/GW));
+          for(let y=ya;y<yb;y++)for(let x=xa2;x<xb2;x++){t++;if(lab[y*W+x]===id)on++;}b+=on*2>=t?'1':'0';}return {b,a:+(w/modeH).toFixed(2)};};
+    const shapes=list=>list.flatMap(pieces).map(shape);
+    let gNum=null,gPct=null;
+    if(br>0){gNum=shapes(live.slice(0,br));const after=live.slice(br+1),close=after.findIndex(isBr);gPct=shapes(close>=0?after.slice(0,close):after);}
+    const gAll=shapes(live);
+    return {canvas:paint(live),num,pct,count:live.length,modeH,box,W,H,gNum,gPct,gAll};
   }
   function variants(r0){let r=r0;
     const out=[];let raw=null;
@@ -1175,6 +1195,30 @@ const OCR=(()=>{
     const list=[];for(let i=0;i<Math.max(...lists.map(l=>l.length));i++)for(const l of lists)if(l[i])list.push(l[i]);
     return {list,raw};
   }
+  /* ---- digit templates learned from this player's own screen ----
+     The game draws every digit the same way each time. Whenever a read is PROVEN (EXP + % fit the table; Meso confirmed),
+     the glyphs of that read are stored as examples of their digits. Later reads compare each glyph with those examples —
+     a shape comparison, not a guess — and are used only when every glyph matches one digit clearly. */
+  let TPL=null;const TPL_MAX=6;
+  async function tplLoad(){if(!TPL){try{TPL=(await getKV('digitTpl'))||{};}catch(e){TPL={};}}return TPL;}
+  const tplSim=(g,t)=>{let both=0,any=0;for(let i=0;i<g.b.length;i++){const p=g.b[i]==='1',q=t.b[i]==='1';if(p&&q)both++;if(p||q)any++;}
+    return (any?both/any:0)-Math.min(0.3,Math.abs(g.a-t.a)*0.8);};
+  function tplDigit(kind,g){const T=TPL?.[kind];if(!T)return null;let best=null,s1=-1,s2=-1;
+    for(const d of Object.keys(T)){let s=-1;for(const t of T[d])s=Math.max(s,tplSim(g,t));if(s>s1){s2=s1;s1=s;best=d;}else if(s>s2)s2=s;}
+    return best!=null&&s1>=0.72&&s1-s2>=0.06?best:null;}
+  // every glyph must be a clear digit; for Meso a frame edge at either end of the field may be skipped
+  const tplRead=(kind,gs,trim=false)=>{if(!gs||!gs.length)return null;let ds=gs.map(g=>tplDigit(kind,g));
+    if(trim){let a=0,b=ds.length;while(a<b&&ds[a]==null&&a<2)a++;while(b>a&&ds[b-1]==null&&ds.length-b<2)b--;ds=ds.slice(a,b);}
+    return ds.length&&ds.every(d=>d!=null)?ds.join(''):null;};
+  // the glyphs that are the digits of a known value: the same count, or the count after dropping a thin frame edge at an end
+  function alignGlyphs(gs,n){if(!gs)return null;if(gs.length===n)return gs;const opts=[];
+    for(let a=0;a<=2;a++)for(let b=0;b<=2;b++){if(gs.length-a-b!==n)continue;const cut=[...gs.slice(0,a),...gs.slice(gs.length-b)];
+      if(cut.every(g=>g.a<0.3))opts.push(gs.slice(a,gs.length-b));}
+    return opts.length===1?opts[0]:null;}
+  async function tplLearn(kind,gs,digits){if(!gs||gs.length!==digits.length)return;await tplLoad();const T=TPL[kind]=TPL[kind]||{};
+    gs.forEach((g,i)=>{const d=digits[i];const L=T[d]=T[d]||[];if(L.some(t=>tplSim(g,t)>0.97))return;L.unshift(g);if(L.length>TPL_MAX)L.length=TPL_MAX;});
+    try{await put('kv',TPL,'digitTpl');}catch(e){}}
+  const tplCount=kind=>Object.keys(TPL?.[kind]||{}).length;
   // MapleStory always shows the % with 2 decimals; dots/commas are removed before reading, so restore the dot.
   // Read the LAST number before the bracket, so stray marks from an "EXP" label in the box are ignored.
   const parseExp=t=>{const s=t.replace(/[,\.]/g,'').replace(/[ \t]+/g,' ');
@@ -1238,8 +1282,15 @@ const OCR=(()=>{
     const want=EXP_REQ[uniq[0].level]*v.pct/100;return {...uniq.sort((a,b)=>Math.abs(a.exp-want)-Math.abs(b.exp-want))[0],approx:true};
   }
   async function readRegion(w,kind){
-    await useParams(w,false);
+    await useParams(w,false);await tplLoad();
     const V=variants(regions[kind]);if(!V)return null;const res=[];
+    // template reads (no Tesseract): every glyph must match a learned digit clearly
+    {const tk=kind==='exp'?'exp':'meso';if(tplCount(tk)>=3)for(const v of V.list){
+      if(kind==='exp'){const n=tplRead(tk,v.gNum),p=tplRead(tk,v.gPct);if(n&&p&&p.length>=3){const pc=+(p.slice(0,-2)+'.'+p.slice(-2));if(pc<=100)res.push({v,text:`tpl: ${n} [${pc}%]`,val:fromPct({exp:+n,pct:pc}),tpl:true});}}
+      else{const m=tplRead(tk,v.gAll,true);if(m&&m.length>=1)res.push({v,text:'tpl: '+m,val:+m,tpl:true});}}
+      const t=res.filter(r=>r.tpl&&r.val!=null);
+      if(t.length>=2&&t.every(r=>same(kind,r.val,t[0].val))&&(kind!=='exp'||typeof EXP_REQ==='undefined'||fitsHint(t[0].val)))
+        return {best:t[0],raw:V.raw,tries:0,all:t.map(x=>x.v.tag+':'+x.text),agree:t.length+2,list:V.list,byTpl:true};}
     for(const v of V.list){let text,val;
       if(kind==='exp'&&v.num&&v.pct){const a=(await w.recognize(v.num)).data.text.trim(),b=(await w.recognize(v.pct)).data.text.trim();
         text=`${a} [${b}]`;const n=a.replace(/[^\d]/g,''),m=b.match(/(\d{1,3})\.(\d{2})/);
@@ -1254,7 +1305,7 @@ const OCR=(()=>{
       if(solid&&agreeCount(res,kind,val)>=3)break;
       if(res.length>=10)break;}
     const best=pickBest(res,kind);
-    return {best,raw:V.raw,tries:res.length,all:res.map(x=>x.v.tag+':'+x.text),agree:best?.val!=null?agreeCount(res,kind,best.val)+(best.voted?2:0):0};
+    return {best,raw:V.raw,tries:res.length,all:res.map(x=>x.v.tag+':'+x.text),agree:best?.val!=null?agreeCount(res,kind,best.val)+(best.voted?2:0):0,list:V.list};
   }
   const same=(kind,a,b)=>a!=null&&b!=null&&(kind==='exp'?a.exp===b.exp&&a.pct===b.pct:a===b);
   const agreeCount=(res,kind,val)=>res.filter(r=>same(kind,r.val,val)).length;
@@ -1279,7 +1330,7 @@ const OCR=(()=>{
         if(st.exp!=null){const d=r.val.exp-st.exp;sc+=d>=0&&d<Math.max(5000,st.exp*0.5)?3:(r.val.pct!=null&&st.pct>60&&r.val.pct<40?2:-2);}}
       else{const len=String(r.val).length;sc+=len>=3&&len<=11?1:-4;sc+=Math.min(len,9)*0.2;
         if(st.meso!=null){sc+=Math.abs(r.val-st.meso)<=Math.max(500000,st.meso*0.5)?3:-2;}}
-      sc+=(agreeCount(res,kind,r.val)-1)*3;if(r.voted)sc+=2.5;
+      sc+=(agreeCount(res,kind,r.val)-1)*3;if(r.voted)sc+=2.5;if(r.tpl)sc+=4;
       if(sc>bs){bs=sc;best=r;}}
     return best||res[0]||null;
   }
@@ -1570,7 +1621,13 @@ const OCR=(()=>{
         // the level the EXP bar itself proves (both numbers match the table at exactly that level)
         const Ls=out.exp.est?[]:fitLevels(out.exp);const H=levelHint??st.level;
         out.expLevel=H!=null&&Ls.includes(H)?H:Ls.length===1?Ls[0]:(H!=null&&Ls.includes(H+1)?H+1:null);}
-      if(k==='meso')out.mesoSure=out.meso!=null&&r.agree>=2;}
+      if(k==='meso')out.mesoSure=out.meso!=null&&r.agree>=2;
+      if(r.byTpl)out['raw'+K]+=' (เทียบแม่แบบตัวเลข)';
+      out['list'+K]=r.list;}
+    // teach the templates with reads that are PROVEN: EXP number + % fit the table (not repaired, not estimated)
+    if(out.exp&&out.expSure&&!out.exp.est&&out.listExp&&!/แก้เป็น/.test(out.rawExp)&&expFitsAt(out.exp,levelHint??st.level)){
+      const dn=String(out.exp.exp),dp=out.exp.pct.toFixed(2).replace('.','');
+      for(const v of out.listExp){if(v.gNum?.length===dn.length&&v.gPct?.length>=dp.length)tplLearn('exp',[...v.gNum,...v.gPct.slice(0,dp.length)],dn+dp);}}
     return out;
   }
   async function readOnce(){
@@ -1581,6 +1638,8 @@ const OCR=(()=>{
       if(regions.who&&!r.black&&(st.cycle%4===1)){try{const who=await readWho(typeof characters!=='undefined'?characters:[]);
         if(who?.level&&(st.level==null||(who.level>=st.level&&who.level<=st.level+1))&&who.level!==st.level)setLevel(who.level,'who');}catch(e){}}
       const okE=regions.exp&&!r.black&&acceptExp(r.exp,t),okM=regions.meso&&!r.black&&acceptMeso(r.meso,t);
+      if(okM&&r.listMeso&&r.meso===st.meso&&st.mesoWin.length>=3&&st.mesoWin.every(x=>x===r.meso)){const dm=String(r.meso);   // 3 identical accepted reads
+        for(const v of r.listMeso){const g=alignGlyphs(v.gAll,dm.length);if(g)tplLearn('meso',g,dm);}}
       if(regions.exp){if(okE)st.errExp=0;else st.errExp++;st.rawExp=r.rawExp;}
       if(regions.meso){if(okM)st.errMeso=0;else st.errMeso++;st.rawMeso=r.rawMeso;}
       const stat=(ok,val,base)=>ok?'ok':(val!=null&&!r.black&&(base==null||(val===r.exp?st.expRej.length:st.mesoRej.length))?'wait':'no');
@@ -1666,7 +1725,7 @@ const OCR=(()=>{
   }
   function restart(){const was=!!timer;reset(true);   // ↺ keeps the level: the EXP table check needs it from the first read
 renderLog();render();$('ocrHint').textContent='↺ เริ่มนับใหม่แล้ว — ตัวเลขจะขึ้นอีกครั้งในไม่กี่วินาที';if(was)start();else if(stream)readOnce();}
-  return {init,live,setTicker,readNow,seed,restart,rememberMap,checkBoxes,_levelCanvases:()=>levelCanvases(regions.who).map(c=>c.toDataURL()),_fromPct:v=>fromPct(v),_titlePrint:titlePrint,_printSim:printSim,_variants:k=>{const V=variants(regions[k]);return V?V.list.map(v=>({tag:v.tag,count:v.count,modeH:v.modeH,img:v.canvas.toDataURL()})):null;},hasRegions:()=>!!(regions.exp||regions.meso),hasAny:()=>Object.values(regions).some(Boolean),has:k=>!!regions[k],readWho,readMap,_readNow:readNow,reset:()=>{reset();render();},snapshot:()=>({expGained:st.expGained,mesoCollected:st.mesoCollected,t0:st.t0}),stop,drawBoxes,_parseExp:parseExp,_parseMeso:parseMeso,_st:st,_accExp:acceptExp,_reqNow:reqNow,_accMeso:acceptMeso,_repairExp:v=>repairExp(v),_fitLevels:fitLevels,_setHint:h=>{levelHint=h;}};
+  return {init,live,setTicker,readNow,seed,restart,rememberMap,checkBoxes,learnMeso:async v=>{if(!stream||!regions.meso||v==null)return;const r=await readNow();if(!r.listMeso)return;const dm=String(v);for(const x of r.listMeso){const g=alignGlyphs(x.gAll,dm.length);if(g)await tplLearn('meso',g,dm);}},_tpl:()=>TPL,_tplLearn:tplLearn,_levelCanvases:()=>levelCanvases(regions.who).map(c=>c.toDataURL()),_fromPct:v=>fromPct(v),_titlePrint:titlePrint,_printSim:printSim,_variants:k=>{const V=variants(regions[k]);return V?V.list.map(v=>({tag:v.tag,count:v.count,modeH:v.modeH,img:v.canvas.toDataURL()})):null;},hasRegions:()=>!!(regions.exp||regions.meso),hasAny:()=>Object.values(regions).some(Boolean),has:k=>!!regions[k],readWho,readMap,_readNow:readNow,reset:()=>{reset();render();},snapshot:()=>({expGained:st.expGained,mesoCollected:st.mesoCollected,t0:st.t0}),stop,drawBoxes,_parseExp:parseExp,_parseMeso:parseMeso,_st:st,_accExp:acceptExp,_reqNow:reqNow,_accMeso:acceptMeso,_repairExp:v=>repairExp(v),_fitLevels:fitLevels,_setHint:h=>{levelHint=h;}};
 })();
 
 // two taps within 3 s → start counting again from what is on screen now (regions are kept)
@@ -1859,6 +1918,7 @@ async function startSession(){
   if(mapId==='__new'){const n=$('s_newMapName').value.trim();if(!n){alert('ใส่ชื่อแมพใหม่ก่อนนะคะ');return;}
     mapId=(await addCustomMap(n,$('s_newMapArea').value,$('s_newMapId').value.trim())).id;}
   try{await OCR.rememberMap(mapId);}catch(e){}            // the player confirmed this map: remember how its title looks
+  try{const mz=num($('s_mesos').value);if(mz!=null)await OCR.learnMeso(mz);}catch(e){}   // …and the Meso digits, from the value the player confirmed
   const st={level:num($('s_level').value),exp:num($('s_exp').value),pct:num($('s_pct').value),mesos:num($('s_mesos').value)};
   if(st.exp==null)st.exp=expAt(st);                                 // above 1M only the % shows: table × %
   if(st.level==null||st.exp==null||st.mesos==null){alert('กรอกอย่างน้อย เลเวล, EXP (หรือ %) และเงิน ก่อนเริ่มการผจญภัยนะคะ');return;}
