@@ -1199,9 +1199,13 @@ const OCR=(()=>{
   function splitJoined(v){
     if(!v||typeof EXP_REQ==='undefined')return v;const L=levelHint??st.level;if(L==null)return v;const d=String(v.exp);
     if(v.pct!=null&&expFitsAt(v,L))return v;
-    for(const k of [3,4]){if(d.length<=k+1)continue;const e=+d.slice(0,-k),p=+d.slice(-k)/100;
-      for(const LL of [L,L+1])if(p<=100&&expFitsAt({exp:e,pct:p},LL))return {exp:e,pct:p};}
-    return v;}
+    // the % part is the last 3–4 digits; the bracket may also have been read as a digit ("[" → "1"), so try skipping one
+    const tries=[];for(const k of [3,4])for(const j of [0,1]){if(d.length<=k+j+1)continue;const p=+d.slice(-k)/100;if(p>100)continue;tries.push({exp:+d.slice(0,-k-j),pct:p});}
+    for(const t of tries)for(const LL of [L,L+1])if(expFitsAt(t,LL))return t;
+    // still no fit: the number part may have lost a digit too — the table + % repair it (only when exactly one split works)
+    const fixed=[];for(const t of tries){const f=repairExp(t);if(f&&!f.approx)fixed.push({exp:f.exp,pct:f.pct});}
+    const uniq=[...new Map(fixed.map(f=>[f.exp+'|'+f.pct,f])).values()];
+    return uniq.length===1?uniq[0]:v;}
   function fromPct(v){
     if(v&&v.exp!=null)v=splitJoined(v);
     if(!v||v.pct==null||typeof EXP_REQ==='undefined')return v;
@@ -1652,7 +1656,7 @@ const OCR=(()=>{
   }
   function restart(){const was=!!timer;reset(true);   // ↺ keeps the level: the EXP table check needs it from the first read
 renderLog();render();$('ocrHint').textContent='↺ เริ่มนับใหม่แล้ว — ตัวเลขจะขึ้นอีกครั้งในไม่กี่วินาที';if(was)start();else if(stream)readOnce();}
-  return {init,live,setTicker,readNow,seed,restart,rememberMap,checkBoxes,_levelCanvases:()=>levelCanvases(regions.who).map(c=>c.toDataURL()),_titlePrint:titlePrint,_printSim:printSim,_variants:k=>{const V=variants(regions[k]);return V?V.list.map(v=>({tag:v.tag,count:v.count,modeH:v.modeH,img:v.canvas.toDataURL()})):null;},hasRegions:()=>!!(regions.exp||regions.meso),hasAny:()=>Object.values(regions).some(Boolean),has:k=>!!regions[k],readWho,readMap,_readNow:readNow,reset:()=>{reset();render();},snapshot:()=>({expGained:st.expGained,mesoCollected:st.mesoCollected,t0:st.t0}),stop,drawBoxes,_parseExp:parseExp,_parseMeso:parseMeso,_st:st,_accExp:acceptExp,_reqNow:reqNow,_accMeso:acceptMeso,_repairExp:v=>repairExp(v),_fitLevels:fitLevels,_setHint:h=>{levelHint=h;}};
+  return {init,live,setTicker,readNow,seed,restart,rememberMap,checkBoxes,_levelCanvases:()=>levelCanvases(regions.who).map(c=>c.toDataURL()),_fromPct:v=>fromPct(v),_titlePrint:titlePrint,_printSim:printSim,_variants:k=>{const V=variants(regions[k]);return V?V.list.map(v=>({tag:v.tag,count:v.count,modeH:v.modeH,img:v.canvas.toDataURL()})):null;},hasRegions:()=>!!(regions.exp||regions.meso),hasAny:()=>Object.values(regions).some(Boolean),has:k=>!!regions[k],readWho,readMap,_readNow:readNow,reset:()=>{reset();render();},snapshot:()=>({expGained:st.expGained,mesoCollected:st.mesoCollected,t0:st.t0}),stop,drawBoxes,_parseExp:parseExp,_parseMeso:parseMeso,_st:st,_accExp:acceptExp,_reqNow:reqNow,_accMeso:acceptMeso,_repairExp:v=>repairExp(v),_fitLevels:fitLevels,_setHint:h=>{levelHint=h;}};
 })();
 
 // two taps within 3 s → start counting again from what is on screen now (regions are kept)
