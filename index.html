@@ -852,7 +852,7 @@ function knownMaps(){if(_maps)return _maps;const by=new Map(),names=new Set();
   for(const [id,name,street] of ALL_MAPS){if(by.has(id)||names.has(norm(name)))continue;names.add(norm(name));by.set(id,{id,name,area:street,street,mobs:[]});}
   return _maps=[...by.values()];}
 const allMaps=()=>[...knownMaps(),...customMaps];
-const mapOf=id=>allMaps().find(m=>m.id===id);
+const mapOf=id=>id==null||id===''?undefined:allMaps().find(m=>String(m.id)===String(id));
 function findMapByName(name){const n=norm(name);return allMaps().find(m=>norm(m.name)===n)||null;}
 async function addCustomMap(name,area,gameId){
   const ex=findMapByName(name);if(ex)return ex;
@@ -1045,7 +1045,7 @@ const OCR=(()=>{
     c.addEventListener('mousedown',e=>{if(!drawMode)return;dragStart=toNorm(e);});
     c.addEventListener('mousemove',e=>{if(!drawMode||!dragStart)return;const p=toNorm(e);const r=rectOf(dragStart,p);drawBoxes(r);zoom(r);});
     window.addEventListener('mouseup',async e=>{if(!drawMode||!dragStart)return;const r=rectOf(dragStart,toNorm(e));dragStart=null;
-      if(r.w>0.005&&r.h>0.004){regions[drawMode]=r;await put('kv',regions,'ocrRegions');document.dispatchEvent(new CustomEvent('lb-regions',{detail:drawMode}));}
+      if(r.w>0.005&&r.h>0.004){regions[drawMode]=r;await put('kv',regions,'ocrRegions');await put('kv',{w:video.videoWidth,h:video.videoHeight},'ocrRegionsSize');document.dispatchEvent(new CustomEvent('lb-regions',{detail:drawMode}));}
       drawMode=null;c.classList.remove('draw');drawBoxes();$('ocrHint').textContent='ตั้งกรอบแล้ว ✅ ติ๊ก "เปิดอ่าน" เพื่อเริ่มอ่านตัวเลข';readOnce();});
     window.addEventListener('resize',()=>drawBoxes());
   }
@@ -1274,16 +1274,21 @@ const OCR=(()=>{
   const P_WORDS={tessedit_char_whitelist:"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789 .:<>-'(),/",tessedit_pageseg_mode:'6'};
   let pMode='digits';
   async function useParams(w,words){const k=words?'words':'digits';if(pMode!==k){await w.setParameters(words?P_WORDS:P_DIGITS);pMode=k;}}
-  function wordCanvases(r){
+  function wordCanvases(r,white=false){
     const vh=video.videoHeight;if(!vh||!r)return [];const sh=Math.max(4,Math.round(r.h*vh));
     const cr=grabCrop(r,true,Math.max(2,Math.min(6,Math.round(160/sh))));if(!cr)return [];
     const {L,W,H}=cr,n=W*H;let mean=0;for(const v of L)mean+=v;mean/=n;const inv=mean<128,th=otsu(L);
     const mk=f=>{const c=document.createElement('canvas');c.width=W+24;c.height=H+24;const g=c.getContext('2d');const img=g.createImageData(W+24,H+24);img.data.fill(255);
       for(let y=0;y<H;y++)for(let x=0;x<W;x++){const v=f(L[y*W+x]),o=((y+12)*(W+24)+x+12)*4;img.data[o]=img.data[o+1]=img.data[o+2]=v;}g.putImageData(img,0,0);return c;};
-    return [mk(v=>inv?255-v:v),mk(v=>((v>th)===inv)?0:255)];      // grey (text dark) and a hard black/white version
+    const out=[mk(v=>inv?255-v:v),mk(v=>((v>th)===inv)?0:255)];      // grey (text dark) and a hard black/white version
+    if(white){const {S}=cr;const c=document.createElement('canvas');c.width=W+24;c.height=H+24;const g=c.getContext('2d');const img=g.createImageData(W+24,H+24);img.data.fill(255);
+      // only near-white, colourless pixels: the title letters, not the coloured map art behind them
+      for(let y=0;y<H;y++)for(let x=0;x<W;x++){const i=y*W+x;if(L[i]>165&&S[i]<0.22){const o=((y+12)*(W+24)+x+12)*4;img.data[o]=img.data[o+1]=img.data[o+2]=0;}}
+      g.putImageData(img,0,0);out.unshift(c);}
+    return out;
   }
   async function readWords(w,kind){const out=[];await useParams(w,true);
-    try{for(const c of wordCanvases(regions[kind]))out.push((await w.recognize(c)).data.text);}finally{await useParams(w,false);}return out;}
+    try{for(const c of wordCanvases(regions[kind],kind==='map'))out.push((await w.recognize(c)).data.text);}finally{await useParams(w,false);}return out;}
   const lev=(a,b)=>{a=a.toLowerCase();b=b.toLowerCase();const d=Array.from({length:a.length+1},(_,i)=>[i]);for(let j=1;j<=b.length;j++)d[0][j]=j;
     for(let i=1;i<=a.length;i++)for(let j=1;j<=b.length;j++)d[i][j]=Math.min(d[i-1][j]+1,d[i][j-1]+1,d[i-1][j-1]+(a[i-1]===b[j-1]?0:1));return d[a.length][b.length];};
   const near=(a,b)=>lev(a,b)<=(b.length>=7?2:b.length>=4?1:0);
@@ -1353,18 +1358,54 @@ const OCR=(()=>{
   // OCR often reads roman numerals with l / 1 / | instead of I ("Ill" → "iii", "Vili" → "viii")
   const romanFix=x=>/^[ivxl1|]+$/i.test(x)&&/[ivx]/i.test(x)?x.toLowerCase().replace(/[l1|]/g,'i'):x;
   function matchMap(texts,maps){
-    let best=null,bs=0,second=0;
+    let best=null,bs=0,second=0;const rank=[];
     for(const m of maps){const mt=m.name.toLowerCase().replace(/<[^>]*>/g,' ').split(/[^a-z0-9]+/).filter(Boolean);if(!mt.length)continue;
       const sw=(m.street||'').toLowerCase().split(/[^a-z0-9]+/).filter(w=>w.length>=3&&!mt.includes(w));
       let sc=0;for(const t of texts){const tt=t.toLowerCase().split(/[^a-z0-9|]+/).map(romanFix).filter(x=>(x.length>=2||/^[ivx\d]$/.test(x))&&!sw.some(w=>x===w||(w.length>=4&&near(x,w))));if(!tt.length)continue;let hit=0;
         for(const w of mt){if(tt.some(x=>x===w||(w.length>=4&&near(x,w))))hit++;}
         // most of what the minimap shows must belong to this map, and the map's own words should be there too
         sc=Math.max(sc,0.7*Math.min(1,hit/tt.length)+0.3*hit/mt.length);}
-      if(sc>bs){second=bs;bs=sc;best=m;}else if(sc>second)second=sc;}
+      rank.push({m,sc});if(sc>bs){second=bs;bs=sc;best=m;}else if(sc>second)second=sc;}
+    rank.sort((a,b)=>b.sc-a.sc);lastRank=rank.filter(x=>x.sc>=0.3).slice(0,3).map(x=>x.m);
     return bs>=0.75&&bs-second>=0.05?best:null;
   }
-  async function readMap(maps){if(!stream||!regions.map||!video.videoWidth||isBlack())return null;const w=await ensure();
-    const texts=await readWords(w,'map');return {map:matchMap(texts,maps||[]),raw:texts.map(t=>t.replace(/\s+/g,' ').trim()).join(' | ')};}
+  let lastRank=[];
+  /* Map title as a picture. The minimap title of a map is drawn the same way every time, so once the player has confirmed
+     which map it is, its picture is stored; next time the picture is compared with the stored ones — no letters to read. */
+  function titlePrint(){
+    const r=regions.map;if(!r)return null;const cr=grabCrop(r,false,1);if(!cr)return null;const {L,S,W,H}=cr;
+    const on=i=>L[i]>165&&S[i]<0.22;let x0=W,x1=-1,y0=H,y1=-1,n=0;
+    for(let y=0;y<H;y++)for(let x=0;x<W;x++)if(on(y*W+x)){n++;if(x<x0)x0=x;if(x>x1)x1=x;if(y<y0)y0=y;if(y>y1)y1=y;}
+    if(n<12||x1-x0<6||y1-y0<3)return null;
+    const GW=96,GH=12,bw=x1-x0+1,bh=y1-y0+1,bits=new Array(GW*GH).fill(0);
+    for(let gy=0;gy<GH;gy++)for(let gx=0;gx<GW;gx++){let c=0,t=0;
+      for(let y=y0+Math.floor(gy*bh/GH);y<y0+Math.max(Math.floor(gy*bh/GH)+1,Math.floor((gy+1)*bh/GH));y++)
+        for(let x=x0+Math.floor(gx*bw/GW);x<x0+Math.max(Math.floor(gx*bw/GW)+1,Math.floor((gx+1)*bw/GW));x++){t++;if(on(y*W+x))c++;}
+      bits[gy*GW+gx]=c*2>=t?1:0;}
+    return {bits:bits.join(''),aspect:+(bw/bh).toFixed(2),px:bh};}
+  const printSim=(a,b)=>{if(!a||!b||Math.abs(a.aspect-b.aspect)/b.aspect>0.08)return 0;let both=0,any=0;
+    for(let i=0;i<a.bits.length;i++){const p=a.bits[i]==='1',q=b.bits[i]==='1';if(p&&q)both++;if(p||q)any++;}return any?both/any:0;};
+  async function rememberMap(mapId){if(!stream||!regions.map||!mapId)return;const p=titlePrint();if(!p)return;
+    const all=(await getKV('mapPrints'))||[];const keep=all.filter(x=>!(x.mapId===mapId&&printSim(x,p)>0.9));
+    keep.unshift({mapId,...p,t:Date.now()});await put('kv',keep.slice(0,300),'mapPrints');}
+  async function readMap(maps){if(!stream||!regions.map||!video.videoWidth||isBlack())return null;
+    const p=titlePrint(),prints=(await getKV('mapPrints'))||[];
+    if(p&&prints.length){let best=null,bs=0,second=0;
+      for(const x of prints){const sc=printSim(p,x);if(sc>bs){if(best?.mapId!==x.mapId)second=bs;bs=sc;best=x;}else if(x.mapId!==best?.mapId&&sc>second)second=sc;}
+      const m=best&&(maps||[]).find(mm=>String(mm.id)===String(best.mapId));
+      if(m&&bs>=0.86&&bs-second>=0.06)return {map:m,raw:`จำภาพชื่อแมพได้ (ตรงกัน ${Math.round(bs*100)}%)`,byPicture:true,cands:[]};}
+    const w=await ensure();
+    const texts=await readWords(w,'map');const map=matchMap(texts,maps||[]);
+    return {map,cands:map?[]:lastRank,raw:texts.map(t=>t.replace(/\s+/g,' ').trim()).join(' | ')};}
+  /* boxes are kept as parts of the shared picture: if the game window changed size since they were drawn they point at the wrong
+     place (MapleStory's interface does not scale with the window). Also flag boxes that hold nothing at all. */
+  async function checkBoxes(){const out=[];if(!stream||!video.videoWidth)return out;
+    const sz=await getKV('ocrRegionsSize');
+    if(sz&&(Math.abs(sz.w-video.videoWidth)>4||Math.abs(sz.h-video.videoHeight)>4))out.push(`ขนาดภาพเกมเปลี่ยนจากตอนตั้งกรอบ (${sz.w}×${sz.h} → ${video.videoWidth}×${video.videoHeight}) — กรอบอาจไม่ตรงตัวเลขแล้ว ตั้งกรอบใหม่ หรือปรับหน้าต่างเกมให้เท่าเดิม`);
+    const name={exp:'EXP',meso:'Meso',who:'เลเวล/ชื่อ',map:'ชื่อแมพ'};
+    for(const k of ['exp','meso','who','map']){if(!regions[k])continue;const cr=grabCrop(regions[k],false,1);if(!cr)continue;let mn=255,mx=0;for(const v of cr.L){if(v<mn)mn=v;if(v>mx)mx=v;}
+      if(mx-mn<40)out.push(`กรอบ ${name[k]} ไม่มีตัวหนังสืออยู่เลย — กรอบอาจเลื่อน หรือหน้าต่างนั้นในเกมปิดอยู่`);}
+    return out;}
   /* ---- accept/reject + accumulate ----
      One misread must never poison the totals:
      • a number is only used after the median of its last 3 reads (one odd read is outvoted)
@@ -1588,7 +1629,7 @@ const OCR=(()=>{
   }
   function restart(){const was=!!timer;reset(true);   // ↺ keeps the level: the EXP table check needs it from the first read
 renderLog();render();$('ocrHint').textContent='↺ เริ่มนับใหม่แล้ว — ตัวเลขจะขึ้นอีกครั้งในไม่กี่วินาที';if(was)start();else if(stream)readOnce();}
-  return {init,live,setTicker,readNow,seed,restart,_variants:k=>{const V=variants(regions[k]);return V?V.list.map(v=>({tag:v.tag,count:v.count,modeH:v.modeH,img:v.canvas.toDataURL()})):null;},hasRegions:()=>!!(regions.exp||regions.meso),hasAny:()=>Object.values(regions).some(Boolean),has:k=>!!regions[k],readWho,readMap,_readNow:readNow,reset:()=>{reset();render();},snapshot:()=>({expGained:st.expGained,mesoCollected:st.mesoCollected,t0:st.t0}),stop,drawBoxes,_parseExp:parseExp,_parseMeso:parseMeso,_st:st,_accExp:acceptExp,_reqNow:reqNow,_accMeso:acceptMeso,_repairExp:v=>repairExp(v),_fitLevels:fitLevels,_setHint:h=>{levelHint=h;}};
+  return {init,live,setTicker,readNow,seed,restart,rememberMap,checkBoxes,_titlePrint:titlePrint,_printSim:printSim,_variants:k=>{const V=variants(regions[k]);return V?V.list.map(v=>({tag:v.tag,count:v.count,modeH:v.modeH,img:v.canvas.toDataURL()})):null;},hasRegions:()=>!!(regions.exp||regions.meso),hasAny:()=>Object.values(regions).some(Boolean),has:k=>!!regions[k],readWho,readMap,_readNow:readNow,reset:()=>{reset();render();},snapshot:()=>({expGained:st.expGained,mesoCollected:st.mesoCollected,t0:st.t0}),stop,drawBoxes,_parseExp:parseExp,_parseMeso:parseMeso,_st:st,_accExp:acceptExp,_reqNow:reqNow,_accMeso:acceptMeso,_repairExp:v=>repairExp(v),_fitLevels:fitLevels,_setHint:h=>{levelHint=h;}};
 })();
 
 // two taps within 3 s → start counting again from what is on screen now (regions are kept)
@@ -1780,6 +1821,7 @@ async function startSession(){
   if(!mapId){alert('เลือกแมพก่อนนะคะ');return;}
   if(mapId==='__new'){const n=$('s_newMapName').value.trim();if(!n){alert('ใส่ชื่อแมพใหม่ก่อนนะคะ');return;}
     mapId=(await addCustomMap(n,$('s_newMapArea').value,$('s_newMapId').value.trim())).id;}
+  try{await OCR.rememberMap(mapId);}catch(e){}            // the player confirmed this map: remember how its title looks
   const st={level:num($('s_level').value),exp:num($('s_exp').value),pct:num($('s_pct').value),mesos:num($('s_mesos').value)};
   if(st.exp==null)st.exp=expAt(st);                                 // above 1M only the % shows: table × %
   if(st.level==null||st.exp==null||st.mesos==null){alert('กรอกอย่างน้อย เลเวล, EXP (หรือ %) และเงิน ก่อนเริ่มการผจญภัยนะคะ');return;}
@@ -1945,8 +1987,11 @@ async function detectMap(){
   const box=$('mapNote');if(!stream||!OCR.has('map')){box.innerHTML='';return;}
   box.innerHTML='⏳ กำลังอ่านชื่อแมพจากจอ…';
   let r;try{r=await OCR.readMap(allMaps());}catch(e){box.innerHTML='⚠️ '+esc(e.message);return;}
-  if(r?.map){mapSeen=r.map;setStartMap(r.map.id);box.innerHTML=`🔎 อ่านจากจอ: <b>${esc(r.map.name)}</b> — เลือกให้แล้ว ✓ <span class="muted small">(ไม่ใช่? ค้นหาแมพอื่นด้านล่างได้)</span>`;}
-  else box.innerHTML=`⚠️ อ่านชื่อแมพไม่ออก — พิมพ์ค้นหาด้านล่างได้เลย (มีแมพทั้งหมด ${allMaps().length} แมพ)${r?.raw?` <details class="muted small"><summary>ข้อความที่ระบบอ่านได้ (ไว้แจ้งปัญหา)</summary>${esc(r.raw)}</details>`:''}`;
+  if(r?.map){mapSeen=r.map;setStartMap(r.map.id);box.innerHTML=`🔎 ${r.byPicture?'จำภาพชื่อแมพได้':'อ่านจากจอ'}: <b>${esc(r.map.name)}</b> — เลือกให้แล้ว ✓ <span class="muted small">(ไม่ใช่? ค้นหาแมพอื่นด้านล่างได้)</span>`;}
+  else if(r?.cands?.length){box.innerHTML=`🔎 อ่านชื่อแมพได้ไม่ชัด — ใช่แมพไหนคะ? ${r.cands.map(m=>`<button type="button" class="btn ghost sm" data-mapc="${esc(String(m.id))}">${esc(m.name)}</button>`).join(' ')} <span class="muted small">หรือค้นหาด้านล่าง · เลือกครั้งเดียว ครั้งหน้าระบบจำภาพชื่อแมพนี้ได้เอง</span>`;
+    box.querySelectorAll('[data-mapc]').forEach(b=>b.onclick=()=>{const m=mapOf(b.dataset.mapc);if(!m)return;mapSeen=m;setStartMap(m.id);OCR.rememberMap(m.id);
+      box.innerHTML=`🔎 <b>${esc(m.name)}</b> — เลือกแล้ว ✓ ระบบจำภาพชื่อแมพนี้ไว้แล้ว`;});}
+  else box.innerHTML=`⚠️ อ่านชื่อแมพไม่ออก — พิมพ์ค้นหาด้านล่างได้เลย (เลือกครั้งเดียว ครั้งหน้าระบบจำภาพชื่อแมพนี้ได้เอง) (มีแมพทั้งหมด ${allMaps().length} แมพ)${r?.raw?` <details class="muted small"><summary>ข้อความที่ระบบอ่านได้ (ไว้แจ้งปัญหา)</summary>${esc(r.raw)}</details>`:''}`;
 }
 
 /* ---- read everything the screen shows as soon as it is shared, and use it to fill the whole setup ---- */
@@ -1985,7 +2030,8 @@ async function detectAll(){
     if(lvUnsure||num($('s_level').value)==null||!r?.exp||r.expSure===false||r.meso==null||r.mesoSure===false)need.push('stats');
     const row=(k,v,sure=true)=>`<span>${k}</span><span>${v?`${v} ${sure?'✓':'<span class="warn small">⚠ ไม่แน่ใจ ตรวจในขั้นนั้น</span>'}`:'<span class="muted">อ่านไม่ได้ — กรอกเองในขั้นนั้น</span>'}</span>`;
     const pic=(img)=>img?`<img class="detimg" alt="" src="${img}">`:'';
-    box.innerHTML=`<h4>🔎 อ่านจากจอได้</h4><div class="grid2">
+    const boxWarn=await OCR.checkBoxes().catch(()=>[]);
+    box.innerHTML=`<h4>🔎 อ่านจากจอได้</h4>${boxWarn.map(w=>`<p class="warn small" style="margin:0 0 6px">⚠️ ${esc(w)}</p>`).join('')}<div class="grid2">
       ${row('ตัวละคร',ch?.name?esc(ch.name)+($('s_char').value==='__new'?' <span class="tag">ใหม่</span>':''):null)}
       ${row('เลเวล',$('s_level').value?'Lv.'+esc($('s_level').value)+(levelCheck?.fixed!=null?` <span class="muted small">(อ่านได้ ${levelCheck.fixed} · แก้จากเลเวลรอบก่อน)</span>`:''):null,!lvUnsure)}
       ${row('แมพ',m?esc(m.name):null)}
