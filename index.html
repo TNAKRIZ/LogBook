@@ -1007,7 +1007,7 @@ const OCR=(()=>{
   let worker=null,loading=null,timer=null,busy=false,drawMode=null,dragStart=null;
   let regions={exp:null,meso:null,who:null,map:null};          // normalised {x,y,w,h} in video-frame space
   const st={};                                // live state
-  function reset(keepLevel=false){Object.assign(st,{expCand:null,mesoCand:null,t0:null,exp:null,pct:null,meso:null,expGained:0,mesoCollected:0,expHist:[],mesoHist:[],lastExpT:null,lastMesoT:null,errExp:0,errMeso:0,black:false,log:[],reqs:[],expWin:[],mesoWin:[],expRej:[],mesoRej:[],level:keepLevel?st.level:null,levelSrc:keepLevel?st.levelSrc:null,lvVotes:[],levelAtExp:null,cycle:0,expBase:0,expCarry:0,mesoBase:0,activeMs:0,lastGainT:null});}
+  function reset(keepLevel=false){Object.assign(st,{expCand:null,mesoCand:null,t0:null,exp:null,pct:null,meso:null,expGained:0,mesoCollected:0,expHist:[],mesoHist:[],lastExpT:null,lastMesoT:null,errExp:0,errMeso:0,black:false,log:[],reqs:[],expWin:[],mesoWin:[],expRej:[],mesoRej:[],level:keepLevel?st.level:null,levelSrc:keepLevel?st.levelSrc:null,lvVotes:[],levelAtExp:null,cycle:0,expBase:0,expCarry:0,mesoBase:0,activeMs:0,lastGainT:null,stillT:null,expRefT:null});}
   reset();
   const ov=()=>$('ocrOverlay');
   /* ---- region drawing ---- */
@@ -1342,26 +1342,32 @@ const OCR=(()=>{
      never a running sum of read-to-read steps — so a misread that comes and goes cannot inflate the totals. */
   const expTotal=()=>Math.max(0,st.expCarry+(st.exp-st.expBase));
   const mesoTotal=()=>Math.max(0,st.meso-st.mesoBase);
-  // time to credit for EXP that came in since the last read; a long gap (idle, then farming again) counts at most ~2 reads
-  const activeStep=t=>Math.min(t-(st.lastExpT||t),Math.max(IDLE_MS,intervalMs()*2));
+  /* Farming clock. Time counts as farming unless the screen PROVED a pause: a clear read showing the same EXP
+     15 s or more after the last gain. Reads that could not be read prove nothing, so their time still counts —
+     otherwise a hard-to-read EXP box makes the clock too short and EXP/hr far too high. */
+  const quietSince=()=>{const ref=st.lastGainT??st.expRefT;return st.stillT!=null&&ref!=null&&st.stillT-ref>=IDLE_MS?st.stillT:null;};
+  function creditGain(t){
+    const ref=st.lastGainT??st.expRefT??t,q=quietSince();
+    st.activeMs+=Math.max(0,q!=null?Math.min(t-q,IDLE_MS+intervalMs()):t-ref);   // after a proven pause: only from the last still read
+    st.lastGainT=t;st.stillT=null;}
   function acceptExp(raw,t){
     const v=cleanExp(raw);if(!v)return false;
     const R0=reqNow();if(R0)for(let i=st.expWin.length-1;i>=0;i--)if(st.expWin[i]>=R0)st.expWin.splice(i,1);   // reads taken before the level was known
     const e=smooth(st.expWin,v.exp);if(e==null)return false;
     if(R0&&st.exp!=null&&st.exp>=R0){st.exp=null;st.expBase=0;st.expHist.length=0;}                           // a baseline that can't exist at this level
     const pct=v.pct!=null&&v.exp===e?v.pct:(reqNow()?+(e/reqNow()*100).toFixed(2):v.pct);
-    if(st.exp==null){st.exp=st.expBase=e;st.pct=pct;st.levelAtExp=st.level;st.t0=st.t0||t;st.lastExpT=t;st.expHist.push({t,c:0});return true;}
+    if(st.exp==null){st.exp=st.expBase=e;st.pct=pct;st.levelAtExp=st.level;st.t0=st.t0||t;st.lastExpT=t;st.expRefT=t;st.stillT=null;st.expHist.push({t,c:0});return true;}
     const R=reqNow()||(st.pct>0?st.exp/(st.pct/100):null);
     const leveled=st.level!=null&&st.levelAtExp!=null&&st.level>st.levelAtExp;
     if(e<st.exp&&R&&st.exp<R*1.01&&(leveled||(st.pct!=null&&pct!=null&&st.pct>60&&st.pct<=100&&pct<40))){      // level-up: bank the old level, start the new one
-      st.activeMs+=activeStep(t);st.lastGainT=t;st.expCarry+=Math.max(0,R-st.expBase);st.expBase=0;st.reqs.length=0;st.exp=e;st.pct=pct;st.levelAtExp=st.level;st.expRej.length=0;st.lastExpT=t;st.expGained=expTotal();st.expHist.push({t,c:st.expGained});return true;}
+      creditGain(t);st.expCarry+=Math.max(0,R-st.expBase);st.expBase=0;st.reqs.length=0;st.exp=e;st.pct=pct;st.levelAtExp=st.level;st.expRej.length=0;st.lastExpT=t;st.expGained=expTotal();st.expHist.push({t,c:st.expGained});return true;}
     st.levelAtExp=st.level;
     const d=e-st.exp,dt=Math.max(1,(t-(st.lastExpT||t))/1000);
     const cap=R?Math.max(R*0.01,R*0.0005*dt):Math.max(5000,st.exp*0.02);           // a believable step for the time passed
     if(d<0||d>cap){rebaseIfStuck(st.expRej,e,t,R?R*0.01:5000,val=>{
         st.expBase+=val-st.exp;                                                   // a misread baseline: move it, never count the jump
         st.exp=val;st.pct=reqNow()?+(val/reqNow()*100).toFixed(2):pct;st.lastExpT=t;st.expGained=expTotal();st.expHist.push({t,c:st.expGained});});return false;}
-    if(d>0){st.activeMs+=activeStep(t);st.lastGainT=t;}                       // no EXP since the last read = paused, not counted
+    if(d>0)creditGain(t);else st.stillT=t;                                    // same EXP on a clear read = proof of a pause
     st.expRej.length=0;st.exp=e;st.pct=pct??st.pct;st.lastExpT=t;st.expGained=expTotal();st.expHist.push({t,c:st.expGained});
     return true;
   }
@@ -1381,17 +1387,19 @@ const OCR=(()=>{
   // start from the values the player confirmed (start of the adventure) — the reader then only has to follow changes
   function seed(v,t=Date.now()){
     if(v.level!=null){st.level=st.levelAtExp=v.level;st.levelSrc='seed';}
-    if(v.exp!=null){st.exp=st.expBase=v.exp;st.expWin=[v.exp,v.exp];st.pct=v.pct??null;st.lastExpT=t;st.expHist=[{t,c:0}];
+    if(v.exp!=null){st.exp=st.expBase=v.exp;st.expWin=[v.exp,v.exp];st.pct=v.pct??null;st.lastExpT=t;st.expRefT=t;st.stillT=null;st.expHist=[{t,c:0}];
       if(v.pct>0.3){const r=v.exp/(v.pct/100);st.reqs=[r,r,r];}}
     if(v.mesos!=null){st.meso=st.mesoBase=v.mesos;st.mesoWin=[v.mesos,v.mesos];st.lastMesoT=t;st.mesoHist=[{t,c:0}];}
     st.t0=t;render();
   }
   const perMin=hist=>{const now=Date.now(),win=hist.filter(h=>now-h.t<=90000);if(win.length<2)return null;const a=win[0],b=win[win.length-1];return b.t>a.t?Math.max(0,(b.c-a.c)/((b.t-a.t)/60000)):null;};
   const perHr=(total,t0)=>t0&&Date.now()-t0>30000?total/((Date.now()-t0)/3.6e6):null;
-  // EXP/hr counts only farming time: once no EXP has come in for 15 s the clock for this rate stops (AFK, town, shopping…)
+  // EXP/hr and Meso/hr count only farming time: the clock stops once a clear read shows no EXP for 15 s (AFK, town, shopping…)
   const IDLE_MS=15000;
-  const expIdle=()=>st.lastGainT==null?st.exp!=null&&st.t0!=null&&Date.now()-st.t0>IDLE_MS:Date.now()-st.lastGainT>IDLE_MS;
+  const expIdle=()=>quietSince()!=null;
   const expRate=()=>st.activeMs>=20000?st.expGained/(st.activeMs/3.6e6):null;
+  // Meso/hr on the same farming clock when EXP is being read; otherwise real time
+  const mesoRate=()=>regions.exp&&st.activeMs>=20000?st.mesoCollected/(st.activeMs/3.6e6):perHr(st.mesoCollected,st.t0);
   function isBlack(){const c=document.createElement('canvas');c.width=48;c.height=27;const g=c.getContext('2d',{willReadFrequently:true});
     g.drawImage(video,0,0,48,27);const d=g.getImageData(0,0,48,27).data;let mx=0;for(let i=0;i<d.length;i+=4)mx=Math.max(mx,d[i],d[i+1],d[i+2]);return mx<24;}
   const shot=(cv,h)=>{if(!cv)return null;const c=document.createElement('canvas');const k=h/cv.height;c.width=Math.max(1,Math.round(cv.width*k));c.height=h;
@@ -1441,7 +1449,7 @@ const OCR=(()=>{
         cell('EXP',r.imgExp,r.binExp,r.exp?fmt(r.exp.exp)+(r.exp.pct!=null?` (${r.exp.pct}%)`:''):'อ่านไม่ได้',e.okE,!!regions.exp)+cell('Meso',r.imgMeso,r.binMeso,r.meso!=null?fmt(r.meso):'อ่านไม่ได้',e.okM,!!regions.meso))+'</div>';}).join('');
   }
   function render(){
-    const eMin=perMin(st.expHist),eHr=expRate(),mMin=perMin(st.mesoHist),mHr=perHr(st.mesoCollected,st.t0);
+    const eMin=perMin(st.expHist),eHr=expRate(),mMin=perMin(st.mesoHist),mHr=mesoRate();
     const req=reqNow()||(st.pct>0?st.exp/(st.pct/100):null);const left=req?req-st.exp:null;const rate=eHr;
     const warn=n=>n>=3?' <span class="bad sub">อ่านไม่ได้ '+n+' ครั้ง</span>':'';
     $('ocrStats').innerHTML=
@@ -1449,7 +1457,7 @@ const OCR=(()=>{
       stat('EXP/นาที',fmtK(eMin))+stat('EXP/ชม. (เฉพาะเวลาที่ได้ EXP)',fmtK(rate)+(timer&&expIdle()?' <span class="sub warn">⏸ หยุดนับ</span>':''))+
       stat('อัปเลเวลในอีก',left&&rate?dur(left/rate*3.6e6):'–')+
       stat('Meso ตอนนี้',fmt(st.meso)+warn(st.errMeso))+stat('Meso เก็บได้',fmt(st.mesoCollected))+
-      stat('Meso/นาที',fmtK(mMin))+stat('Meso/ชม. (ประเมิน)',fmtK(mHr||(mMin?mMin*60:null)));
+      stat('Meso/นาที',fmtK(mMin))+stat('Meso/ชม. (เฉพาะเวลาฟาร์ม)',fmtK(mHr||(mMin?mMin*60:null)));
     if(typeof PIP!=='undefined')PIP.update();
   }
   /* ---- autofill start / checkpoint / end fields (still editable) ---- */
@@ -1462,7 +1470,7 @@ const OCR=(()=>{
     else{fill('c_exp',exp);fill('c_pct',pct);fill('e_exp',exp);fill('e_pct',pct);fill('e_mesos',meso);fill('c_level',lvl);fill('e_level',lvl);}
   }
   function live(){
-    const eMin=perMin(st.expHist),eHr=expRate(),mMin=perMin(st.mesoHist),mHr=perHr(st.mesoCollected,st.t0);
+    const eMin=perMin(st.expHist),eHr=expRate(),mMin=perMin(st.mesoHist),mHr=mesoRate();
     const req=reqNow()||(st.pct>0?st.exp/(st.pct/100):null),rate=eHr,left=req?req-st.exp:null;
     return {on:!!timer,exp:st.exp,pct:st.pct,expHr:rate,pctHr:req&&rate?rate/req*100:null,eta:left!=null&&rate?left/rate*3.6e6:null,
       mesoHr:mHr||(mMin?mMin*60:null),t0:st.t0,idle:!!timer&&expIdle(),activeMs:st.activeMs,errExp:st.errExp,errMeso:st.errMeso,hasExp:!!regions.exp,hasMeso:!!regions.meso,black:!!st.black};
