@@ -2,7 +2,7 @@
 """Rebuild the game reference data embedded in index.html from the MeowDB pages
 that .github/workflows/fetch-icons.yml saves into assets/meowdb/.
 
-  EXP_REQ[L]  = EXP needed to go from level L to L+1 (Classic World table)
+  EXP_REQ[L]  = EXP the bar fills at level L (to reach L+1) — MeowDB row L, 'EXP to next'
   ALL_MAPS    = [mapId, name, street] for every map MeowDB lists
 
 Run from the repo root:  python3 tools/build_data.py
@@ -26,10 +26,11 @@ for m in re.finditer(r'(?<![\d,])(\d{1,3}) ([\d,]+) ([\d,]+)(?= )', t):
         rows[L] = (a, c)
 for L in range(3, max(rows) + 1):          # the table must be self-consistent
     assert rows[L - 1][1] + rows[L][0] == rows[L][1], f'EXP table mismatch at {L}'
-exp_req = [0] * (max(rows))
-for L in range(1, max(rows)):
-    exp_req[L] = rows[L + 1][0]            # leaving level L needs the "reach L+1" amount
-exp_req = exp_req[:max(rows)]
+# MeowDB's column is "EXP to next": row L = the EXP the bar fills at level L (checked on the game HUD:
+# Lv.63 shows 40,652 = 2.86% of 1,420,016, which is row 63)
+exp_req = [0] * (max(rows) + 1)
+for L in range(1, max(rows) + 1):
+    exp_req[L] = rows[L][0]
 
 # ---- maps: links under street headings ----
 s = (src / 'maps-all.html').read_text(encoding='utf-8')

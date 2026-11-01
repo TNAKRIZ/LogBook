@@ -3,7 +3,7 @@
 const {chromium}=require('playwright');
 (async()=>{const b=await chromium.launch();const p=await b.newPage();const errs=[];p.on('pageerror',e=>errs.push(e.message));
 await p.goto('http://localhost:8123/index.html');await p.waitForTimeout(800);
-const r=await p.evaluate(()=>{const st=OCR._st;OCR.reset();st.level=61;OCR.restart();
+const r=await p.evaluate(()=>{const st=OCR._st;OCR.reset();st.level=62;OCR.restart();
  const R=1346242;let t=1e12,exp=593087;const pct=e=>Math.round(e/R*10000)/100;
  const read=v=>OCR._accExp(v,t),junk=()=>OCR._accExp(null,t);                 // an unreadable frame
  for(let i=0;i<3;i++)read({exp,pct:pct(exp)});   // confirmed start (3 matching reads)
