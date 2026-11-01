@@ -5,7 +5,7 @@ name: Fetch item icons
 on:
   push:
     branches: [main]
-    paths: ['assets/icon-ids.txt', '.github/workflows/fetch-icons.yml']
+    paths: ['assets/icon-ids.txt', 'assets/meowdb-pages.txt', '.github/workflows/fetch-icons.yml']
   workflow_dispatch:
 
 permissions:
@@ -72,6 +72,11 @@ jobs:
           print(len(out), 'summaries')
           PY
           rm -rf assets/_probe
+      - name: Save reference pages (EXP table, map list)
+        run: |
+          grep -vE '^\s*(#|$)' assets/meowdb-pages.txt | while IFS='|' read -r name url; do
+            curl -fsSL -A "LogBook-data-fetch (github.com/TNAKRIZ/LogBook)" -o "assets/meowdb/$name.html" "$url" && echo "saved $name $(wc -c < assets/meowdb/$name.html)" || echo "FAILED $name"
+          done
       - name: Commit
         run: |
           git config user.name "github-actions[bot]"

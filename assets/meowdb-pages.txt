@@ -1,0 +1,3 @@
+# Reference pages saved by .github/workflows/fetch-icons.yml into assets/meowdb/<name>.html
+exp-table|https://meowdb.com/msclassic/guides/exp-table-level-1-to-100
+maps-all|https://meowdb.com/msclassic/maps/all
