@@ -968,11 +968,13 @@ let active=null,stream=null,autoTimer=null,tickTimer=null;
 const video=$('video');
 async function startShare(){
   if(!navigator.mediaDevices?.getDisplayMedia){alert('เบราว์เซอร์นี้แชร์หน้าจอไม่ได้ — เปิดไฟล์นี้ด้วย Chrome หรือ Edge บนคอม');return;}
-  try{stream=await navigator.mediaDevices.getDisplayMedia({video:{frameRate:5},audio:false});}
+  try{stream=await navigator.mediaDevices.getDisplayMedia({video:{frameRate:5,width:{ideal:4096},height:{ideal:2304},resizeMode:'none'},audio:false});}
   catch(e){$('shareStatus').textContent='ไม่ได้แชร์หน้าจอ ('+e.name+')';return;}
   video.srcObject=stream;$('screenBlock').classList.remove('nostream');stream.getVideoTracks()[0].addEventListener('ended',stopShare);setTimeout(()=>OCR.drawBoxes(),500);
   $('btnShare').disabled=true;$('btnStopShare').disabled=false;$('btnSnap').disabled=false;
-  $('shareStatus').innerHTML='<span class="live-dot"></span>กำลังแชร์หน้าจอ — กด Next ไปตั้งกรอบอ่านตัวเลขได้เลย';setupAuto();$('ocrNeedShare').style.display='none';
+  $('shareStatus').innerHTML='<span class="live-dot"></span>กำลังแชร์หน้าจอ — กด Next ไปตั้งกรอบอ่านตัวเลขได้เลย <span class="muted small" id="shareRes"></span>';
+  // show the size the browser really captures: fewer pixels than the screen = smaller digits = worse reading
+  video.addEventListener('loadedmetadata',()=>{const el=$('shareRes');if(el)el.textContent=`(ภาพ ${video.videoWidth}×${video.videoHeight})`;},{once:true});setupAuto();$('ocrNeedShare').style.display='none';
   if(OCR.hasAny()){$('shareStatus').innerHTML='<span class="live-dot"></span>กำลังแชร์หน้าจอ — ใช้กรอบที่ตั้งไว้ครั้งก่อน อ่านข้อมูลให้แล้วด้านล่าง';
     if(OCR.hasRegions()&&!$('ocrOn').checked){$('ocrOn').checked=true;$('ocrOn').dispatchEvent(new Event('change'));}
     if(!active)setTimeout(detectAll,900);}
@@ -1195,6 +1197,7 @@ const OCR=(()=>{
     if(!v||v.pct==null||typeof EXP_REQ==='undefined')return v;
     const L=levelHint??st.level,R=L!=null?EXP_REQ[L]:0;
     const est=R?Math.round(R*v.pct/100):null,hidden=est!=null&&est>=EXP_HIDE;
+    if(v.exp!=null&&v.exp<EXP_HIDE&&fitLevels(v).length)return v;
     if(v.exp==null||v.exp>=EXP_HIDE||(hidden&&!expFitsAt(v,L)))return est!=null?{exp:est,pct:v.pct,est:true}:{exp:null,pct:v.pct};
     return v;}
   const fitsHint=v=>{const L=levelHint??st.level;if(L==null)return fitLevels(v).length===1;return expFitsAt(v,L)||expFitsAt(v,L+1)||expFitsAt(v,L-1);};
@@ -1487,7 +1490,7 @@ const OCR=(()=>{
         else if(fitsHint(out.exp)){out.expSure=true;}
         else{const fix=repairExp(out.exp);if(fix){out.rawExp+=` → แก้เป็น ${fix.exp} (ตรงกับตาราง EXP${fix.approx?' · ค่าประมาณ':''})`;out.exp={exp:fix.exp,pct:fix.pct};out.expSure=!fix.approx;}else out.expSure=false;}
         // the level the EXP bar itself proves (both numbers match the table at exactly that level)
-        const Ls=fitLevels(out.exp);const H=levelHint??st.level;
+        const Ls=out.exp.est?[]:fitLevels(out.exp);const H=levelHint??st.level;
         out.expLevel=H!=null&&Ls.includes(H)?H:Ls.length===1?Ls[0]:(H!=null&&Ls.includes(H+1)?H+1:null);}
       if(k==='meso')out.mesoSure=out.meso!=null&&r.agree>=2;}
     return out;
@@ -1966,6 +1969,8 @@ async function detectAll(){
       // values from the screen replace anything carried over from last session (dataset.auto==='1'), never what the player typed
       const set=(id,v)=>{if(v==null)return;const el=$(id);if(el.value===''||el.dataset.auto==='1'){el.value=v;el.dataset.auto='1';}};
       if(r.exp&&r.expSure!==false){set('s_exp',r.exp.exp);set('s_pct',r.exp.pct);}
+      {const ref=(charOf($('s_char').value))?.last?.mesos;     // a digit dropped or doubled lands far from what this character had
+        if(r.meso!=null&&ref>0&&(r.meso<ref*0.5||r.meso>ref*2+1e6)){r.mesoSure=false;r.mesoFar=ref;}}
       if(r.meso!=null&&r.mesoSure!==false)set('s_mesos',r.meso);
       // the EXP bar proves the level when EXP and % both match the table at exactly one level
       if(r.expLevel!=null){const L=$('s_level');if(L.value===''||L.dataset.auto==='1'||num(L.value)!==r.expLevel){
@@ -1975,7 +1980,8 @@ async function detectAll(){
     const need=[];
     if(!(ch?.name))need.push('char');
     if(!m)need.push('map');
-    const lvUnsure=levelCheck&&levelCheck.level==null;
+    const lvProven=r?.expLevel!=null&&num($('s_level').value)===r.expLevel;          // EXP number + % match the table at this level
+    const lvUnsure=!lvProven&&(levelCheck?levelCheck.level==null||levelCheck.sure===null:false);
     if(lvUnsure||num($('s_level').value)==null||!r?.exp||r.expSure===false||r.meso==null||r.mesoSure===false)need.push('stats');
     const row=(k,v,sure=true)=>`<span>${k}</span><span>${v?`${v} ${sure?'✓':'<span class="warn small">⚠ ไม่แน่ใจ ตรวจในขั้นนั้น</span>'}`:'<span class="muted">อ่านไม่ได้ — กรอกเองในขั้นนั้น</span>'}</span>`;
     const pic=(img)=>img?`<img class="detimg" alt="" src="${img}">`:'';
@@ -1984,7 +1990,7 @@ async function detectAll(){
       ${row('เลเวล',$('s_level').value?'Lv.'+esc($('s_level').value)+(levelCheck?.fixed!=null?` <span class="muted small">(อ่านได้ ${levelCheck.fixed} · แก้จากเลเวลรอบก่อน)</span>`:''):null,!lvUnsure)}
       ${row('แมพ',m?esc(m.name):null)}
       ${row('EXP',r?.exp?`${pic(r.imgExp)}${r.exp.est?'≈':''}${fmt(r.exp.exp)}${r.exp.pct!=null?` (${r.exp.pct}%)`:''}${r.exp.est?' <span class="muted small">คิดจาก %</span>':''}`:null,r?.expSure!==false)}
-      ${row('เงิน',r?.meso!=null?`${pic(r.imgMeso)}${fmt(r.meso)} mesos`:null,r?.mesoSure!==false)}</div>
+      ${row('เงิน',r?.meso!=null?`${pic(r.imgMeso)}${fmt(r.meso)} mesos${r.mesoFar?` <span class="muted small">(ห่างจากรอบก่อน ${fmt(r.mesoFar)} มาก)</span>`:''}`:null,r?.mesoSure!==false)}</div>
       <div class="row" style="margin-top:10px">${need.length
         ?`<button type="button" class="btn sm" id="detGo">ตรวจส่วนที่เหลือ →</button>`
         :`<button type="button" class="btn sm" id="detGo">✔ ถูกต้อง ไปเลือกยาเลย</button>`}<button type="button" class="btn ghost sm" id="detAgain">อ่านใหม่</button>
