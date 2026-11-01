@@ -1394,7 +1394,16 @@ const OCR=(()=>{
         // the map's own words must be there; stray words from the box (map art, buttons) cost a little
         sc=Math.max(sc,0.75*hit/mt.length+0.25*Math.min(1,hit/tt.length));}
       rank.push({m,sc});if(sc>bs){second=bs;bs=sc;best=m;}else if(sc>second)second=sc;}
-    rank.sort((a,b)=>b.sc-a.sc);lastRank=rank.filter(x=>x.sc>=0.3).slice(0,3).map(x=>x.m);
+    rank.sort((a,b)=>b.sc-a.sc);
+    // "Remains <Tomb> II" vs "III": the same words, only the roman numeral differs. Reading tends to LOSE strokes ("III" → "ll"),
+    // so between such a pair take the one matching the longest numeral seen in any read.
+    if(rank.length>1&&rank[0].sc-rank[1].sc<0.05){const base=n=>n.toLowerCase().replace(/<[^>]*>/g,' ').replace(/\b[ivx]+\b/g,'').replace(/[^a-z0-9]+/g,' ').trim();
+      const num=n=>(n.toLowerCase().match(/\b([ivx]+)\s*$/)||[])[1]||'';
+      const seen=texts.flatMap(t=>t.toLowerCase().split(/[^a-z0-9|]+/).map(romanFix)).filter(x=>/^[ivx]+$/.test(x)).sort((a,b)=>b.length-a.length)[0];
+      const same=rank.filter(x=>rank[0].sc-x.sc<0.05&&base(x.m.name)===base(rank[0].m.name));
+      const pick=seen&&same.length>1?same.find(x=>num(x.m.name)===seen):null;
+      if(pick){best=pick.m;bs=pick.sc;second=Math.max(...rank.filter(x=>base(x.m.name)!==base(pick.m.name)).map(x=>x.sc),0);rank.splice(rank.indexOf(pick),1);rank.unshift(pick);}}
+    lastRank=rank.filter(x=>x.sc>=0.3).slice(0,3).map(x=>x.m);
     return bs>=0.75&&bs-second>=0.05?best:null;
   }
   let lastRank=[];
