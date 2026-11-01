@@ -364,7 +364,7 @@ footer a{color:inherit}
         <div id="s_ocrConf"></div>
         <div class="fields">
           <div><label>เลเวล</label><input id="s_level" type="number" inputmode="numeric"></div>
-          <div><label>EXP (ตัวเลข)</label><input id="s_exp" type="number" inputmode="numeric"></div>
+          <div><label>EXP (ตัวเลข)</label><input id="s_exp" type="number" inputmode="numeric" placeholder="เกินล้าน เกมไม่โชว์ — เว้นว่าง ใส่แค่ %"></div>
           <div><label>EXP %</label><input id="s_pct" type="number" step="0.01" inputmode="decimal"></div>
           <div><label>เงิน (mesos)</label><input id="s_mesos" type="number" inputmode="numeric"></div>
         </div>
@@ -413,7 +413,7 @@ footer a{color:inherit}
       <p class="muted small" style="margin-top:0">ใส่ EXP ตอนนี้เพื่อดู EXP/ชม. แบบเรียลไทม์ (ถ่ายภาพหน้าจอแนบให้ด้วย)</p>
       <div class="fields">
         <div><label>เลเวล</label><input id="c_level" type="number" inputmode="numeric"></div>
-        <div><label>EXP (ตัวเลข)</label><input id="c_exp" type="number" inputmode="numeric"></div>
+        <div><label>EXP (ตัวเลข)</label><input id="c_exp" type="number" inputmode="numeric" placeholder="เกินล้าน เกมไม่โชว์ — เว้นว่าง ใส่แค่ %"></div>
         <div><label>EXP %</label><input id="c_pct" type="number" step="0.01" inputmode="decimal"></div>
       </div>
       <div class="row" style="margin-top:12px"><button class="btn ghost" id="btnCheck">บันทึกจุดเช็ก</button></div>
@@ -430,7 +430,7 @@ footer a{color:inherit}
           <div id="e_ocrConf"></div>
           <div class="fields">
             <div><label>เลเวล</label><input id="e_level" type="number" inputmode="numeric"></div>
-            <div><label>EXP (ตัวเลข)</label><input id="e_exp" type="number" inputmode="numeric"></div>
+            <div><label>EXP (ตัวเลข)</label><input id="e_exp" type="number" inputmode="numeric" placeholder="เกินล้าน เกมไม่โชว์ — เว้นว่าง ใส่แค่ %"></div>
             <div><label>EXP %</label><input id="e_pct" type="number" step="0.01" inputmode="decimal"></div>
             <div><label>เงิน (mesos)</label><input id="e_mesos" type="number" inputmode="numeric"></div>
             <div><label>ตายกี่ครั้ง</label><input id="e_deaths" type="number" inputmode="numeric" value="0"></div>
@@ -922,12 +922,17 @@ async function migrateV1toV2(s){
 
 /* ===================== calculations ===================== */
 function reqOf(p){return p&&p.exp!=null&&p.pct>0?p.exp/(p.pct/100):null;}
+// EXP needed for level L (the Classic table), or null
+const reqAt=L=>typeof EXP_REQ!=='undefined'&&L&&EXP_REQ[L]?EXP_REQ[L]:null;
+// EXP at a point; above 1,000,000 the game shows only the %, so a point with just a % and a level is table × %
+function expAt(p){if(!p)return null;if(p.exp!=null)return p.exp;const R=reqAt(p.level);return R&&p.pct!=null?Math.round(R*p.pct/100):null;}
 function expGained(a,b){
-  if(!a||!b||a.exp==null||b.exp==null)return null;
+  const ea=expAt(a),eb=expAt(b);if(ea==null||eb==null)return null;
   const la=a.level||0,lb=b.level||la;
-  if(lb===la)return b.exp-a.exp;
+  if(lb===la)return eb-ea;
+  if(reqAt(la)&&lb>la){let sum=reqAt(la)-ea;for(let L=la+1;L<lb;L++)sum+=reqAt(L)||0;return sum+eb;}   // the table, level by level
   const ra=reqOf(a)??reqOf(b);if(ra==null)return null;
-  return (ra-a.exp)+Math.max(0,lb-la-1)*ra+b.exp;
+  return (ra-ea)+Math.max(0,lb-la-1)*ra+eb;
 }
 function priceFor(s,id){const p=s.prices?.[id];if(p)return p;const it=itemOf(id);return{shop:it?.shop||0,market:it?.market||0};}
 function calc(s){
@@ -1007,7 +1012,7 @@ const OCR=(()=>{
   let worker=null,loading=null,timer=null,busy=false,drawMode=null,dragStart=null;
   let regions={exp:null,meso:null,who:null,map:null};          // normalised {x,y,w,h} in video-frame space
   const st={};                                // live state
-  function reset(keepLevel=false){Object.assign(st,{expCand:null,mesoCand:null,t0:null,exp:null,pct:null,meso:null,expGained:0,mesoCollected:0,expHist:[],mesoHist:[],lastExpT:null,lastMesoT:null,errExp:0,errMeso:0,black:false,log:[],reqs:[],expWin:[],mesoWin:[],expRej:[],mesoRej:[],level:keepLevel?st.level:null,levelSrc:keepLevel?st.levelSrc:null,lvVotes:[],levelAtExp:null,cycle:0,expBase:0,expCarry:0,mesoBase:0,activeMs:0,lastGainT:null,stillT:null,expRefT:null});}
+  function reset(keepLevel=false){Object.assign(st,{expCand:null,mesoCand:null,t0:null,exp:null,pct:null,meso:null,expGained:0,mesoCollected:0,expHist:[],mesoHist:[],lastExpT:null,lastMesoT:null,errExp:0,errMeso:0,black:false,log:[],reqs:[],expWin:[],mesoWin:[],expRej:[],mesoRej:[],level:keepLevel?st.level:null,levelSrc:keepLevel?st.levelSrc:null,lvVotes:[],levelAtExp:null,cycle:0,expBase:0,expCarry:0,mesoBase:0,activeMs:0,lastGainT:null,stillT:null,expRefT:null,expEst:false});}
   reset();
   const ov=()=>$('ocrOverlay');
   /* ---- region drawing ---- */
@@ -1170,6 +1175,9 @@ const OCR=(()=>{
   const parseExp=t=>{const s=t.replace(/[,\.]/g,'').replace(/[ \t]+/g,' ');
     let m=s.match(/(\d+)\s*[\[\(\]\)]+\s*(\d{2,5})\s*[%\]\)]/);
     if(m){const exp=parseInt(m[1],10),pd=m[2],pct=parseFloat(pd.slice(0,-2)+'.'+pd.slice(-2));if(isFinite(exp)&&pct<=100)return {exp,pct};}
+    // only a % (the game hides the number above 1,000,000 EXP): "[8230%]" or "8230%"
+    const po=[...s.matchAll(/[\[\(]\s*(\d{3,5})\s*(?:[%\]\)]|$)|(\d{3,5})\s*%/g)].pop();
+    if(po){const pd=po[1]||po[2],pct=parseFloat(pd.slice(0,-2)+'.'+pd.slice(-2));if(pct<=100)return {exp:null,pct};}
     const all=s.match(/\d+/g);if(!all)return null;const big=all.sort((a,b)=>b.length-a.length)[0];return {exp:parseInt(big,10),pct:null};};
   const parseMeso=t=>{const groups=t.replace(/[,\.]/g,'').match(/\d+/g);if(!groups)return null;const big=groups.sort((a,b)=>b.length-a.length)[0];return parseInt(big,10);};
   /* ---- EXP table check: at level L the bar shows EXP and % of EXP_REQ[L]; a true read must satisfy both at once ---- */
@@ -1178,6 +1186,16 @@ const OCR=(()=>{
   const fitLevels=v=>{const out=[];if(typeof EXP_REQ==='undefined'||!v||v.pct==null)return out;
     for(let L=1;L<EXP_REQ.length;L++)if(expFitsAt(v,L))out.push(L);return out;};
   let levelHint=null;                                          // the level the page believes (from the LV box or the player)
+  /* MapleStory Classic hides the EXP number once it passes 1,000,000 — only "[82.30%]" is shown. Then EXP = table × %.
+     0.01% is the finest step (~135 EXP at Lv.61); totals are end − start, so that never adds up over a session.
+     A number read where the game cannot show one (≥ 1,000,000) is a misread, so the % wins there too. */
+  const EXP_HIDE=1e6;
+  function fromPct(v){
+    if(!v||v.pct==null||typeof EXP_REQ==='undefined')return v;
+    const L=levelHint??st.level,R=L!=null?EXP_REQ[L]:0;
+    const est=R?Math.round(R*v.pct/100):null,hidden=est!=null&&est>=EXP_HIDE;
+    if(v.exp==null||v.exp>=EXP_HIDE||(hidden&&!expFitsAt(v,L)))return est!=null?{exp:est,pct:v.pct,est:true}:{exp:null,pct:v.pct};
+    return v;}
   const fitsHint=v=>{const L=levelHint??st.level;if(L==null)return fitLevels(v).length===1;return expFitsAt(v,L)||expFitsAt(v,L+1)||expFitsAt(v,L-1);};
   // OCR most often drops or doubles one digit ("593,087" → "53,087"). With the level and % known, the true value
   // lies in a ~0.02% window, so try every one-digit insertion/deletion/substitution and keep the single one that fits.
@@ -1207,9 +1225,11 @@ const OCR=(()=>{
     for(const v of V.list){let text,val;
       if(kind==='exp'&&v.num&&v.pct){const a=(await w.recognize(v.num)).data.text.trim(),b=(await w.recognize(v.pct)).data.text.trim();
         text=`${a} [${b}]`;const n=a.replace(/[^\d]/g,''),m=b.match(/(\d{1,3})\.(\d{2})/);
-        val=n?{exp:parseInt(n,10),pct:m&&+(m[1]+'.'+m[2])<=100?+(m[1]+'.'+m[2]):null}:null;
+        const pc=m&&+(m[1]+'.'+m[2])<=100?+(m[1]+'.'+m[2]):null;
+        val=n?{exp:parseInt(n,10),pct:pc}:(pc!=null?{exp:null,pct:pc}:null);
         if(val&&val.pct==null){const f=parseExp(text);if(f?.pct!=null)val.pct=f.pct;}}
       else{text=(await w.recognize(v.canvas)).data.text.trim();val=kind==='exp'?parseExp(text):parseMeso(text);}
+      if(kind==='exp'){val=fromPct(val);if(val&&val.exp==null)val=null;}           // % only and no level yet = nothing usable
       res.push({v,text,val});
       // stop early once 3 reads agree on a believable value (an EXP read must include the %, a Meso read at least 3 digits)
       const solid=kind==='exp'?val?.pct!=null&&(typeof EXP_REQ==='undefined'||fitsHint(val)):val!=null&&(String(val).length>=3||st.meso!=null&&Math.abs(val-st.meso)<1000);
@@ -1231,11 +1251,12 @@ const OCR=(()=>{
     const vals=res.map(r=>r.val).filter(v=>v!=null);
     if(vals.length>=3){
       if(kind==='exp'){const e=digitVote(vals.map(v=>String(v.exp)),2),p=digitVote(vals.filter(v=>v.pct!=null).map(v=>v.pct.toFixed(2).padStart(6,'0')));
-        if(e){const val={exp:+e,pct:p?+p:(vals.find(v=>v.pct!=null)?.pct??null)};res=[...res,{v:res[0].v,text:'vote: '+e+(p?` [${+p}%]`:''),val,voted:true}];}}
+        if(e){const val=fromPct({exp:+e,pct:p?+p:(vals.find(v=>v.pct!=null)?.pct??null)});res=[...res,{v:res[0].v,text:'vote: '+e+(p?` [${+p}%]`:''),val,voted:true}];}}
       else{const m=digitVote(vals.map(String),3);if(m)res=[...res,{v:res[0].v,text:'vote: '+m,val:+m,voted:true}];}}
     let best=null,bs=-1e9;
     for(const r of res){if(r.val==null)continue;let sc=0;
       if(kind==='exp'){const len=String(r.val.exp).length;sc+=r.val.pct!=null?4:0;sc+=len>=2&&len<=11?1:-3;
+        if(r.val.est&&r.val.exp<EXP_HIDE)sc-=4;                                   // the game shows this number: a real read beats the %
         if(r.val.pct!=null&&typeof EXP_REQ!=='undefined')sc+=fitsHint(r.val)?12:(fitLevels(r.val).length?2:-6);
         if(st.exp!=null){const d=r.val.exp-st.exp;sc+=d>=0&&d<Math.max(5000,st.exp*0.5)?3:(r.val.pct!=null&&st.pct>60&&r.val.pct<40?2:-2);}}
       else{const len=String(r.val).length;sc+=len>=3&&len<=11?1:-4;sc+=Math.min(len,9)*0.2;
@@ -1316,15 +1337,20 @@ const OCR=(()=>{
     if(st.level!=null&&typeof EXP_REQ!=='undefined'&&EXP_REQ[st.level])return EXP_REQ[st.level];
     let best=null,n=0;for(const r of st.reqs){const k=st.reqs.filter(o=>Math.abs(o-r)/r<=0.015).length;if(k>n){n=k;best=r;}}
     return n>=3?med(st.reqs.filter(o=>Math.abs(o-best)/best<=0.015)):null;}
+  // a new level from the LV box or the bar: a correction, unless the bar is near its end (then it is a level-up the wrap will book)
+  function setLevel(L,src){st.level=L;st.levelSrc=src;if(!(st.pct!=null&&st.pct>=90))st.levelAtExp=L;}
   function cleanExp(v){
-    if(!v||!isFinite(v.exp)||v.exp<=0)return null;v={exp:v.exp,pct:v.pct};
+    if(!v||!isFinite(v.exp)||v.exp<=0)return null;v={exp:v.exp,pct:v.pct,est:!!v.est};
     if(typeof EXP_REQ!=='undefined'&&v.pct!=null){
-      {const Ls=fitLevels(v);   // runs even when the level came from the form: a stale "62" is outvoted by the bar                  // the bar itself tells the level —
+      if(!v.est){const Ls=fitLevels(v);   // runs even when the level came from the form: a stale "62" is outvoted by the bar                  // the bar itself tells the level —
         st.lvVotes=[...(st.lvVotes||[]),Ls.length===1?Ls[0]:null].slice(-7);           // but a misread % digit points a level off,
         const c=[...st.lvVotes.reduce((m,L)=>L==null?m:m.set(L,(m.get(L)||0)+1),new Map())].sort((a,b)=>b[1]-a[1]);
-        if(c[0]&&c[0][1]>=4&&c[0][1]-(c[1]?.[1]||0)>=3&&c[0][0]!==st.level){st.level=c[0][0];st.levelSrc='bar';}}  // so it needs a clear majority
+        if(c[0]&&c[0][1]>=4&&c[0][1]-(c[1]?.[1]||0)>=3&&c[0][0]!==st.level)setLevel(c[0][0],'bar');}  // so it needs a clear majority
       // a repair must land on this exact level: a level-up is learned from the LV box / the bar wrapping, never from a repair
-      if(st.level!=null&&!expFitsAt(v,st.level)){const fix=repairExp(v);if(!fix||fix.level!==st.level)return null;v={exp:fix.exp,pct:fix.pct};}}
+      // …except the first reads of the NEXT level right after the bar fills up (exact numbers that fit level+1)
+      if(!v.est&&st.level!=null&&!expFitsAt(v,st.level)){
+        if(st.pct!=null&&st.pct>60&&v.pct<40&&expFitsAt(v,st.level+1))return {...v,next:true};
+        const fix=repairExp(v);if(!fix||fix.level!==st.level)return null;v={exp:fix.exp,pct:fix.pct};}}
     if(v.pct!=null&&v.pct>=0.3){const r=v.exp/(v.pct/100);st.reqs.push(r);if(st.reqs.length>20)st.reqs.shift();}
     const R=reqNow();
     if(R){if(v.exp>R*1.01)return null;                                  // more EXP than the level = misread
@@ -1353,22 +1379,29 @@ const OCR=(()=>{
   function acceptExp(raw,t){
     const v=cleanExp(raw);if(!v)return false;
     const R0=reqNow();if(R0)for(let i=st.expWin.length-1;i>=0;i--)if(st.expWin[i]>=R0)st.expWin.splice(i,1);   // reads taken before the level was known
-    const e=smooth(st.expWin,v.exp);if(e==null)return false;
+    let e=smooth(st.expWin,v.exp);if(e==null)return false;
     if(R0&&st.exp!=null&&st.exp>=R0){st.exp=null;st.expBase=0;st.expHist.length=0;}                           // a baseline that can't exist at this level
     const pct=v.pct!=null&&v.exp===e?v.pct:(reqNow()?+(e/reqNow()*100).toFixed(2):v.pct);
-    if(st.exp==null){st.exp=st.expBase=e;st.pct=pct;st.levelAtExp=st.level;st.t0=st.t0||t;st.lastExpT=t;st.expRefT=t;st.stillT=null;st.expHist.push({t,c:0});return true;}
+    if(st.exp==null){st.exp=st.expBase=e;st.expEst=!!v.est;st.pct=pct;st.levelAtExp=st.level;st.t0=st.t0||t;st.lastExpT=t;st.expRefT=t;st.stillT=null;st.expHist.push({t,c:0});return true;}
     const R=reqNow()||(st.pct>0?st.exp/(st.pct/100):null);
-    const leveled=st.level!=null&&st.levelAtExp!=null&&st.level>st.levelAtExp;
-    if(e<st.exp&&R&&st.exp<R*1.01&&(leveled||(st.pct!=null&&pct!=null&&st.pct>60&&st.pct<=100&&pct<40))){      // level-up: bank the old level, start the new one
-      creditGain(t);st.expCarry+=Math.max(0,R-st.expBase);st.expBase=0;st.reqs.length=0;st.exp=e;st.pct=pct;st.levelAtExp=st.level;st.expRej.length=0;st.lastExpT=t;st.expGained=expTotal();st.expHist.push({t,c:st.expGained});return true;}
-    st.levelAtExp=st.level;
+    // level-up = the bar wrapped (high % → low %). The finished level is the one the EXP values belonged to
+    // (the LV box may already show the new one); bank its full table value, then continue on the next level.
+    const oldL=st.levelAtExp??st.level,Rold=oldL!=null&&typeof EXP_REQ!=='undefined'&&EXP_REQ[oldL]?EXP_REQ[oldL]:R;
+    const pctNew=v.next&&v.exp===e?v.pct:pct;
+    if(e<st.exp&&Rold&&st.exp<Rold*1.01&&st.pct!=null&&pctNew!=null&&st.pct>60&&st.pct<=100&&pctNew<40){
+      creditGain(t);st.expCarry+=Math.max(0,Rold-st.expBase);st.expBase=0;st.reqs.length=0;
+      if(oldL!=null&&typeof EXP_REQ!=='undefined'&&EXP_REQ[oldL+1]){
+        if(st.level!==oldL+1){st.level=oldL+1;st.levelSrc='wrap';}st.lvVotes=[];
+        if(v.est)e=Math.round(EXP_REQ[st.level]*pctNew/100);                                              // re-scale the estimate to the new level
+        st.expWin=[e,e,e];}
+      st.exp=e;st.expEst=!!v.est;st.pct=pctNew;st.levelAtExp=st.level;st.expRej.length=0;st.lastExpT=t;st.expGained=expTotal();st.expHist.push({t,c:st.expGained});return true;}
     const d=e-st.exp,dt=Math.max(1,(t-(st.lastExpT||t))/1000);
     const cap=R?Math.max(R*0.01,R*0.0005*dt):Math.max(5000,st.exp*0.02);           // a believable step for the time passed
     if(d<0||d>cap){rebaseIfStuck(st.expRej,e,t,R?R*0.01:5000,val=>{
         st.expBase+=val-st.exp;                                                   // a misread baseline: move it, never count the jump
         st.exp=val;st.pct=reqNow()?+(val/reqNow()*100).toFixed(2):pct;st.lastExpT=t;st.expGained=expTotal();st.expHist.push({t,c:st.expGained});});return false;}
     if(d>0)creditGain(t);else st.stillT=t;                                    // same EXP on a clear read = proof of a pause
-    st.expRej.length=0;st.exp=e;st.pct=pct??st.pct;st.lastExpT=t;st.expGained=expTotal();st.expHist.push({t,c:st.expGained});
+    st.expRej.length=0;st.exp=e;st.expEst=!!v.est;st.pct=pct??st.pct;st.lastExpT=t;st.expGained=expTotal();st.expHist.push({t,c:st.expGained});
     return true;
   }
   function acceptMeso(v,t){
@@ -1414,7 +1447,8 @@ const OCR=(()=>{
     for(const k of ['exp','meso']){if(!regions[k])continue;const r=await readRegion(w,k);if(!r)continue;const K=k==='exp'?'Exp':'Meso';
       out[k]=r.best?.val??null;out['all'+K]=r.all;out['raw'+K]=r.best?.text||'';out['img'+K]=shot(r.raw,36);out['bin'+K]=r.best?shot(r.best.v.canvas,30):null;
       if(k==='exp'&&out.exp){
-        if(fitsHint(out.exp)){out.expSure=true;}
+        if(out.exp.est){out.expSure=true;out.rawExp+=` → ≈${out.exp.exp} (คิดจาก % × ตาราง EXP — เกมไม่โชว์ตัวเลขเมื่อเกินล้าน)`;}
+        else if(fitsHint(out.exp)){out.expSure=true;}
         else{const fix=repairExp(out.exp);if(fix){out.rawExp+=` → แก้เป็น ${fix.exp} (ตรงกับตาราง EXP${fix.approx?' · ค่าประมาณ':''})`;out.exp={exp:fix.exp,pct:fix.pct};out.expSure=!fix.approx;}else out.expSure=false;}
         // the level the EXP bar itself proves (both numbers match the table at exactly that level)
         const Ls=fitLevels(out.exp);const H=levelHint??st.level;
@@ -1425,10 +1459,10 @@ const OCR=(()=>{
   async function readOnce(){
     if(busy||!stream||(!regions.exp&&!regions.meso))return;busy=true;
     try{
-      const t=Date.now(),r=await readNow();st.black=r.black;
+      const t=Date.now(),r=await readNow(st.level??levelHint);st.black=r.black;
       st.cycle=(st.cycle||0)+1;
       if(regions.who&&!r.black&&(st.cycle%4===1)){try{const who=await readWho(typeof characters!=='undefined'?characters:[]);
-        if(who?.level&&(st.level==null||(who.level>=st.level&&who.level<=st.level+1))){st.level=who.level;st.levelSrc='who';}}catch(e){}}
+        if(who?.level&&(st.level==null||(who.level>=st.level&&who.level<=st.level+1))&&who.level!==st.level)setLevel(who.level,'who');}catch(e){}}
       const okE=regions.exp&&!r.black&&acceptExp(r.exp,t),okM=regions.meso&&!r.black&&acceptMeso(r.meso,t);
       if(regions.exp){if(okE)st.errExp=0;else st.errExp++;st.rawExp=r.rawExp;}
       if(regions.meso){if(okM)st.errMeso=0;else st.errMeso++;st.rawMeso=r.rawMeso;}
@@ -1446,14 +1480,14 @@ const OCR=(()=>{
     const cell=(lbl,img,bin,val,ok,has)=>!has?'':`<span class="lg ${ok}"><b>${lbl}</b>${img?`<img alt="" src="${img}" title="ภาพจากจอ">`:''}${bin?`<span class="arr">→</span><img class="bin" alt="" src="${bin}" title="ภาพที่ใช้อ่าน">`:''}<span class="v">${val}</span>${ok==='ok'?'✓':ok==='wait'?'<span class="small">รอยืนยันอีกครั้ง</span>':'✗'}</span>`;
     box.innerHTML=`<div class="muted small" style="width:100%">🔎 ภาพหลักฐานการอ่านล่าสุด — ตัวเลขควรตรงกับภาพ ถ้าไม่ตรงลองตั้งกรอบใหม่ให้แคบเฉพาะตัวเลข</div>`+
       st.log.slice().reverse().map(e=>{const r=e.r;return `<div class="ocrlog"><span class="t">${hms(e.t)}</span>`+(r.black?'<span class="lg no">⚠️ ภาพจอดำ</span>':
-        cell('EXP',r.imgExp,r.binExp,r.exp?fmt(r.exp.exp)+(r.exp.pct!=null?` (${r.exp.pct}%)`:''):'อ่านไม่ได้',e.okE,!!regions.exp)+cell('Meso',r.imgMeso,r.binMeso,r.meso!=null?fmt(r.meso):'อ่านไม่ได้',e.okM,!!regions.meso))+'</div>';}).join('');
+        cell('EXP',r.imgExp,r.binExp,r.exp?(r.exp.est?'≈':'')+fmt(r.exp.exp)+(r.exp.pct!=null?` (${r.exp.pct}%)`:''):'อ่านไม่ได้',e.okE,!!regions.exp)+cell('Meso',r.imgMeso,r.binMeso,r.meso!=null?fmt(r.meso):'อ่านไม่ได้',e.okM,!!regions.meso))+'</div>';}).join('');
   }
   function render(){
     const eMin=perMin(st.expHist),eHr=expRate(),mMin=perMin(st.mesoHist),mHr=mesoRate();
     const req=reqNow()||(st.pct>0?st.exp/(st.pct/100):null);const left=req?req-st.exp:null;const rate=eHr;
     const warn=n=>n>=3?' <span class="bad sub">อ่านไม่ได้ '+n+' ครั้ง</span>':'';
     $('ocrStats').innerHTML=
-      stat('EXP ตอนนี้',`${fmt(st.exp)}${st.pct!=null?` <span class="sub">${st.pct}%</span>`:''}${warn(st.errExp)}`)+
+      stat('EXP ตอนนี้',`${st.expEst?'≈':''}${fmt(st.exp)}${st.pct!=null?` <span class="sub">${st.pct}%</span>`:''}${warn(st.errExp)}`)+
       stat('EXP/นาที',fmtK(eMin))+stat('EXP/ชม. (เฉพาะเวลาที่ได้ EXP)',fmtK(rate)+(timer&&expIdle()?' <span class="sub warn">⏸ หยุดนับ</span>':''))+
       stat('อัปเลเวลในอีก',left&&rate?dur(left/rate*3.6e6):'–')+
       stat('Meso ตอนนี้',fmt(st.meso)+warn(st.errMeso))+stat('Meso เก็บได้',fmt(st.mesoCollected))+
@@ -1708,7 +1742,8 @@ async function startSession(){
   if(mapId==='__new'){const n=$('s_newMapName').value.trim();if(!n){alert('ใส่ชื่อแมพใหม่ก่อนนะคะ');return;}
     mapId=(await addCustomMap(n,$('s_newMapArea').value,$('s_newMapId').value.trim())).id;}
   const st={level:num($('s_level').value),exp:num($('s_exp').value),pct:num($('s_pct').value),mesos:num($('s_mesos').value)};
-  if(st.level==null||st.exp==null||st.mesos==null){alert('กรอกอย่างน้อย เลเวล, EXP และเงิน ก่อนเริ่มการผจญภัยนะคะ');return;}
+  if(st.exp==null)st.exp=expAt(st);                                 // above 1M only the % shows: table × %
+  if(st.level==null||st.exp==null||st.mesos==null){alert('กรอกอย่างน้อย เลเวล, EXP (หรือ %) และเงิน ก่อนเริ่มการผจญภัยนะคะ');return;}
   const items={};let missing=[];
   $('s_items').querySelectorAll('.pick').forEach(p=>{if(!p.querySelector('input[type=checkbox]').checked)return;
     const q=num(p.querySelector('input[type=number]').value);if(q==null){missing.push(itemOf(p.dataset.id)?.name);return;}
@@ -1764,7 +1799,8 @@ function snapshotPrices(s){const p={};for(const id of Object.keys(s.items||{})){
 
 async function checkpoint(){
   if(!active)return;const p={level:num($('c_level').value),exp:num($('c_exp').value),pct:num($('c_pct').value)};
-  if(p.exp==null){alert('ใส่ EXP ก่อนนะคะ');return;}
+  if(p.exp==null)p.exp=expAt(p);                                   // above 1M only the % shows: table × %
+  if(p.exp==null){alert('ใส่ EXP หรือ % กับเลเวล ก่อนนะคะ');return;}
   p.time=Date.now();if(stream)p.shotId=await saveShot('check','จุดเช็ก');
   active.checks.push(p);await put('kv',active,'active');$('c_exp').value='';$('c_pct').value='';renderLive();
 }
@@ -1816,7 +1852,7 @@ async function ocrConfirm(prefix){
   let r;try{r=await OCR.readNow(num($(prefix+'_level')?.value));}catch(e){box.innerHTML=`<p class="bad small">⚠️ ${esc(e.message)}</p>`;return;}
   if(r.black){box.innerHTML='<p class="bad small">⚠️ ภาพที่แชร์เป็นจอดำ — ลองเปลี่ยนเกมเป็นโหมดหน้าต่าง หรือ borderless แล้วแชร์ใหม่</p>';return;}
   const row=(k,img,val)=>`<div class="r"><span class="k">${k}</span>${img?`<img alt="" src="${img}">`:''}<span class="val">${val}</span></div>`;
-  const ev=r.exp?`${fmt(r.exp.exp)}${r.exp.pct!=null?` <span class="muted">(${r.exp.pct}%)</span>`:''}${r.expSure===false?' <span class="warn small">⚠ ไม่ตรงกับตาราง EXP — ลองอ่านใหม่</span>':r.expLevel!=null?` <span class="muted small">· Lv.${r.expLevel}</span>`:''}`:'<span class="bad">อ่านไม่ได้</span>';
+  const ev=r.exp?`${r.exp.est?'≈':''}${fmt(r.exp.exp)}${r.exp.pct!=null?` <span class="muted">(${r.exp.pct}%)</span>`:''}${r.expSure===false?' <span class="warn small">⚠ ไม่ตรงกับตาราง EXP — ลองอ่านใหม่</span>':r.expLevel!=null?` <span class="muted small">· Lv.${r.expLevel}</span>`:''}`:'<span class="bad">อ่านไม่ได้</span>';
   const mv=r.meso!=null?fmt(r.meso):'<span class="bad">อ่านไม่ได้</span>';
   box.innerHTML=`<div class="ocrconf">${r.imgExp?row('EXP',r.imgExp,ev):''}${r.imgMeso?row('Meso',r.imgMeso,mv):''}
     <div class="r">${(r.exp||r.meso!=null)?'<button type="button" class="btn sm" data-use>✔ ตรงกับภาพ ใช้ค่านี้</button>':''}<button type="button" class="btn ghost sm" data-again>อ่านใหม่</button><span class="muted small">เทียบตัวเลขกับภาพก่อนกดนะคะ ถ้าไม่ตรงกรอกเองได้</span></div></div>`;
@@ -1891,7 +1927,7 @@ async function detectAll(){
       ${row('ตัวละคร',ch?.name?esc(ch.name)+($('s_char').value==='__new'?' <span class="tag">ใหม่</span>':''):null)}
       ${row('เลเวล',$('s_level').value?'Lv.'+esc($('s_level').value):null)}
       ${row('แมพ',m?esc(m.name):null)}
-      ${row('EXP',r?.exp?`${pic(r.imgExp)}${fmt(r.exp.exp)}${r.exp.pct!=null?` (${r.exp.pct}%)`:''}`:null,r?.expSure!==false)}
+      ${row('EXP',r?.exp?`${pic(r.imgExp)}${r.exp.est?'≈':''}${fmt(r.exp.exp)}${r.exp.pct!=null?` (${r.exp.pct}%)`:''}${r.exp.est?' <span class="muted small">คิดจาก %</span>':''}`:null,r?.expSure!==false)}
       ${row('เงิน',r?.meso!=null?`${pic(r.imgMeso)}${fmt(r.meso)} mesos`:null,r?.mesoSure!==false)}</div>
       <div class="row" style="margin-top:10px">${need.length
         ?`<button type="button" class="btn sm" id="detGo">ตรวจส่วนที่เหลือ →</button>`
@@ -1976,7 +2012,7 @@ const SW=makeWizard({root:'startCard',steps:'sw_steps',back:'sw_back',next:'sw_n
     char(){const v=$('s_char').value;if(!v)return 'เลือกหรือสร้างตัวละครก่อนนะคะ';
       if(v==='__new'){const n=$('nc_name').value.trim();if(!n)return 'ใส่ชื่อตัวละครก่อนนะคะ';if(characters.some(c=>norm(c.name)===norm(n)))return 'มีตัวละครชื่อนี้อยู่แล้ว เลือกจากการ์ดด้านบนได้เลยค่ะ';}},
     map(){const m=$('s_map').value;if(!m)return 'เลือกแมพจากรายการก่อนนะคะ';if(m==='__new'&&!$('s_newMapName').value.trim())return 'ใส่ชื่อแมพใหม่ก่อนนะคะ';},
-    stats(){if(num($('s_level').value)==null||num($('s_exp').value)==null||num($('s_mesos').value)==null)return 'กรอกอย่างน้อย เลเวล, EXP และเงิน นะคะ';},
+    stats(){if(num($('s_level').value)==null||expAt({exp:num($('s_exp').value),pct:num($('s_pct').value),level:num($('s_level').value)})==null||num($('s_mesos').value)==null)return 'กรอกอย่างน้อย เลเวล, EXP (หรือ %) และเงิน นะคะ';},
     items(){const miss=checkedStartItems().filter(i=>i.qty==null).map(i=>itemOf(i.id)?.name);if(miss.length)return 'ใส่จำนวนของ: '+miss.join(', ');}
   },
   enter:{
@@ -2017,7 +2053,7 @@ function renderStartReview(){
     ${row('แมพ',`${esc(m?.name||'–')} · ${party>1?'ปาร์ตี้ '+party+' คน':'คนเดียว'}`,'map')}
     ${row('จอเกม',stream?'✅ แชร์แล้ว · ถ่ายภาพอัตโนมัติ '+($('autoInt').value==='0'?'ปิด':'ทุก '+$('autoInt').value+' นาที'):'ไม่ได้แชร์ (กรอกเอง)','screen')}
     ${row('อ่านตัวเลข',$('ocrOn').checked?'✅ กำลังอ่าน EXP / Meso ทุก 5 วิ':'ไม่ได้เปิด','ocr')}
-    ${row('ค่าตอนเริ่ม',`Lv.${esc($('s_level').value)} · EXP ${fmt(num($('s_exp').value))}${$('s_pct').value?` (${esc($('s_pct').value)}%)`:''} · ${fmt(num($('s_mesos').value))} mesos`,'stats')}
+    ${row('ค่าตอนเริ่ม',`Lv.${esc($('s_level').value)} · EXP ${num($('s_exp').value)==null&&num($('s_pct').value)!=null?'≈'+fmt(expAt({pct:num($('s_pct').value),level:num($('s_level').value)})):fmt(num($('s_exp').value))}${$('s_pct').value?` (${esc($('s_pct').value)}%)`:''} · ${fmt(num($('s_mesos').value))} mesos`,'stats')}
     ${row('ยา',items.length?items.map(i=>`<span class="chip iname">${ico(i.id,16)}${esc(itemOf(i.id)?.name||i.id)} ×${fmt(i.qty)}</span>`).join(' '):'ไม่ได้เลือกยา','items')}
     ${row('หน้าต่างลอย',(PIP.getMode()==='compact'?'▬ แถบเล็ก':'▣ แบบเต็ม')+(pipAutoOn()?' · เปิดให้เองตอนเริ่ม':' · ไม่เปิดเอง'),'pip')}
    </div>`;
@@ -2027,7 +2063,8 @@ $('s_review').onclick=e=>{const b=e.target.closest('[data-go]');if(b)SW.goKey(b.
 function buildEnd(){
   const e={level:num($('e_level').value),exp:num($('e_exp').value),pct:num($('e_pct').value),mesos:num($('e_mesos').value),
     deaths:num($('e_deaths').value)||0,charm:num($('e_charm').value)||0,drops:readDrops($('e_drops')),etc:readDrops($('e_etc')),note:$('e_note').value.trim(),ocr:OCR.snapshot()};
-  if(e.exp==null||e.mesos==null)return {err:'กรอก EXP และเงิน ตอนจบรอบด้วยนะคะ'};
+  if(e.exp==null)e.exp=expAt(e);
+  if(e.exp==null||e.mesos==null)return {err:'กรอก EXP (หรือ % กับเลเวล) และเงิน ตอนจบรอบด้วยนะคะ'};
   const items=structuredClone(active.items);const missing=[];
   $('e_items').querySelectorAll('tr[data-id]').forEach(tr=>{const v=items[tr.dataset.id];v.bought=num(tr.querySelector('.ib').value)||0;
     v.end=num(tr.querySelector('.ie').value);if(v.end==null)missing.push(itemOf(tr.dataset.id)?.name);});
@@ -2038,7 +2075,7 @@ function buildEnd(){
 const EW=makeWizard({root:'endCard',steps:'ew_steps',back:'ew_back',next:'ew_next',finish:'btnEnd',err:'ew_err',
   labels:['ค่าตอนจบ','ยา','ของดรอป','ETC','สรุป'],
   validate:{
-    values(){if(num($('e_exp').value)==null||num($('e_mesos').value)==null)return 'กรอก EXP และเงิน ตอนจบรอบด้วยนะคะ';},
+    values(){if(expAt({exp:num($('e_exp').value),pct:num($('e_pct').value),level:num($('e_level').value)})==null||num($('e_mesos').value)==null)return 'กรอก EXP (หรือ % กับเลเวล) และเงิน ตอนจบรอบด้วยนะคะ';},
     potions(){const miss=[];$('e_items').querySelectorAll('tr[data-id]').forEach(tr=>{if(num(tr.querySelector('.ie').value)==null)miss.push(itemOf(tr.dataset.id)?.name);});if(miss.length)return 'ใส่จำนวนที่เหลือของ: '+miss.join(', ');}
   },
   enter:{values:()=>{if(stream&&OCR.hasRegions())ocrConfirm('e');},review:()=>renderEndReview()}});
