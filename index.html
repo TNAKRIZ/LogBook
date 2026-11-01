@@ -1189,7 +1189,13 @@ const OCR=(()=>{
     for(let i=0;i<d.length;i++)tries.add(d.slice(0,i)+d.slice(i+1));
     const fits=[];for(const t of tries){if(t.length>1&&t[0]==='0')continue;const e=+t;
       for(const L of cand)if(L>0&&expFitsAt({exp:e,pct:v.pct},L)){fits.push({exp:e,pct:v.pct,level:L});break;}}
-    const uniq=[...new Map(fits.map(f=>[f.exp,f])).values()];
+    let uniq=[...new Map(fits.map(f=>[f.exp,f])).values()];
+    // still nothing: several digits went missing ("691,715" → "1,715"). With the level known, scan the few hundred values
+    // the % allows and keep those that contain every digit we did read, in order.
+    if(!uniq.length&&Ls!=null){const sub=(a,b)=>{let j=0;for(const ch of b)if(ch===a[j])j++;return j===a.length;};
+      for(const L of cand){const R=EXP_REQ[L];if(!R||R>2e8)continue;const tol=R*0.00011+50,want=R*v.pct/100;
+        for(let e=Math.max(0,Math.ceil(want-tol));e<=want+tol;e++){const t=String(e);
+          if(t.length>d.length&&t.length-d.length<=3&&d.length>=2&&sub(d,t)&&expFitsAt({exp:e,pct:v.pct},L))uniq.push({exp:e,pct:v.pct,level:L});}}}
     if(uniq.length<=1)return uniq[0]||null;
     // several fit only when they differ in the last digits at one level: take the one nearest what the % says
     const lv=new Set(uniq.map(f=>f.level));if(lv.size!==1)return null;
@@ -1313,7 +1319,7 @@ const OCR=(()=>{
   function cleanExp(v){
     if(!v||!isFinite(v.exp)||v.exp<=0)return null;v={exp:v.exp,pct:v.pct};
     if(typeof EXP_REQ!=='undefined'&&v.pct!=null){
-      if(st.level==null||st.levelSrc==='bar'){const Ls=fitLevels(v);                  // the bar itself tells the level —
+      {const Ls=fitLevels(v);   // runs even when the level came from the form: a stale "62" is outvoted by the bar                  // the bar itself tells the level —
         st.lvVotes=[...(st.lvVotes||[]),Ls.length===1?Ls[0]:null].slice(-7);           // but a misread % digit points a level off,
         const c=[...st.lvVotes.reduce((m,L)=>L==null?m:m.set(L,(m.get(L)||0)+1),new Map())].sort((a,b)=>b[1]-a[1]);
         if(c[0]&&c[0][1]>=4&&c[0][1]-(c[1]?.[1]||0)>=3&&c[0][0]!==st.level){st.level=c[0][0];st.levelSrc='bar';}}  // so it needs a clear majority
