@@ -1297,9 +1297,9 @@ const OCR=(()=>{
     const mk=f=>{const c=document.createElement('canvas');c.width=W+24;c.height=H+24;const g=c.getContext('2d');const img=g.createImageData(W+24,H+24);img.data.fill(255);
       for(let y=0;y<H;y++)for(let x=0;x<W;x++){const v=f(L[y*W+x]),o=((y+12)*(W+24)+x+12)*4;img.data[o]=img.data[o+1]=img.data[o+2]=v;}g.putImageData(img,0,0);return c;};
     const out=[mk(v=>inv?255-v:v),mk(v=>((v>th)===inv)?0:255)];      // grey (text dark) and a hard black/white version
-    if(white){const {S}=cr;const wt=whiteCut(L);const c=document.createElement('canvas');c.width=W+24;c.height=H+24;const g=c.getContext('2d');const img=g.createImageData(W+24,H+24);img.data.fill(255);
+    if(white){const {S}=cr;const M=localMean(L,W,H,Math.max(4,Math.round(H*0.12)));const c=document.createElement('canvas');c.width=W+24;c.height=H+24;const g=c.getContext('2d');const img=g.createImageData(W+24,H+24);img.data.fill(255);
       // only near-white, colourless pixels: the title letters, not the coloured map art behind them
-      for(let y=0;y<H;y++)for(let x=0;x<W;x++){const i=y*W+x;if(L[i]>wt&&S[i]<0.25){const o=((y+12)*(W+24)+x+12)*4;img.data[o]=img.data[o+1]=img.data[o+2]=0;}}
+      for(let y=0;y<H;y++)for(let x=0;x<W;x++){const i=y*W+x;if(L[i]>170&&L[i]>M[i]+22&&S[i]<0.25){const o=((y+12)*(W+24)+x+12)*4;img.data[o]=img.data[o+1]=img.data[o+2]=0;}}
       g.putImageData(img,0,0);out.unshift(c);}
     return out;
   }
@@ -1384,14 +1384,15 @@ const OCR=(()=>{
     return r;}
   // OCR often reads roman numerals with l / 1 / | instead of I ("Ill" → "iii", "Vili" → "viii")
   const romanFix=x=>/^[ivxl1|]+$/i.test(x)&&/[ivx]/i.test(x)?x.toLowerCase().replace(/[l1|]/g,'i'):x;
+  const MAP_FRAME_WORDS=['mini','map','world','minimap'];   // printed on the minimap window itself
   function matchMap(texts,maps){
     let best=null,bs=0,second=0;const rank=[];
     for(const m of maps){const mt=m.name.toLowerCase().replace(/<[^>]*>/g,' ').split(/[^a-z0-9]+/).filter(Boolean);if(!mt.length)continue;
       const sw=(m.street||'').toLowerCase().split(/[^a-z0-9]+/).filter(w=>w.length>=3&&!mt.includes(w));
-      let sc=0;for(const t of texts){const tt=t.toLowerCase().split(/[^a-z0-9|]+/).map(romanFix).filter(x=>(x.length>=2||/^[ivx\d]$/.test(x))&&!sw.some(w=>x===w||(w.length>=4&&near(x,w))));if(!tt.length)continue;let hit=0;
+      let sc=0;for(const t of texts){const tt=t.toLowerCase().split(/[^a-z0-9|]+/).map(romanFix).filter(x=>(x.length>=2||/^[ivx\d]$/.test(x))&&!MAP_FRAME_WORDS.includes(x)&&!sw.some(w=>x===w||(w.length>=4&&near(x,w))));if(!tt.length)continue;let hit=0;
         for(const w of mt){if(tt.some(x=>x===w||(w.length>=4&&near(x,w))))hit++;}
-        // most of what the minimap shows must belong to this map, and the map's own words should be there too
-        sc=Math.max(sc,0.7*Math.min(1,hit/tt.length)+0.3*hit/mt.length);}
+        // the map's own words must be there; stray words from the box (map art, buttons) cost a little
+        sc=Math.max(sc,0.75*hit/mt.length+0.25*Math.min(1,hit/tt.length));}
       rank.push({m,sc});if(sc>bs){second=bs;bs=sc;best=m;}else if(sc>second)second=sc;}
     rank.sort((a,b)=>b.sc-a.sc);lastRank=rank.filter(x=>x.sc>=0.3).slice(0,3).map(x=>x.m);
     return bs>=0.75&&bs-second>=0.05?best:null;
@@ -1401,7 +1402,7 @@ const OCR=(()=>{
      which map it is, its picture is stored; next time the picture is compared with the stored ones — no letters to read. */
   function titlePrint(){
     const r=regions.map;if(!r)return null;const cr=grabCrop(r,false,1);if(!cr)return null;const {L,S,W,H}=cr;
-    const wt=whiteCut(L),on=i=>L[i]>wt&&S[i]<0.25;let x0=W,x1=-1,y0=H,y1=-1,n=0;
+    const M=localMean(L,W,H,Math.max(3,Math.round(Math.min(W,H)*0.08))),on=i=>L[i]>170&&L[i]>M[i]+22&&S[i]<0.25;let x0=W,x1=-1,y0=H,y1=-1,n=0;
     for(let y=0;y<H;y++)for(let x=0;x<W;x++)if(on(y*W+x)){n++;if(x<x0)x0=x;if(x>x1)x1=x;if(y<y0)y0=y;if(y>y1)y1=y;}
     if(n<12||x1-x0<6||y1-y0<3)return null;
     const GW=96,GH=12,bw=x1-x0+1,bh=y1-y0+1,bits=new Array(GW*GH).fill(0);

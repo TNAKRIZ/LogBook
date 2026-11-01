@@ -1,7 +1,7 @@
 // Real MapleStory Classic HUD (Harry's screen, Lv.63): level tiles, EXP and the 2-line minimap title.
 const {chromium}=require('playwright');
 const IMG='fixtures/real-hud-63-full.jpg';
-const BOX={who:[305,785,160,30],exp:[768,785,115,15],map:[50,25,96,36],expWide:[765,782,140,32]};
+const BOX={who:[305,785,160,30],exp:[768,785,115,15],map:[50,25,96,36],mapWide:[2,3,150,75],expWide:[765,782,140,32]};
 const CASES=[{k:1,name:'screenshot size'},{k:1.76,name:'native 2560 (upscaled)'}];
 (async()=>{const b=await chromium.launch();let pass=0,total=0;
 for(const C of CASES){
@@ -19,8 +19,10 @@ for(const C of CASES){
       const r=await OCR._readNow(63);res['exp_'+tag]={exp:r.exp,raw:r.rawExp};}
     const w=await OCR.readWho([{id:'c1',name:'TNAKRIZ',job:'magician'}]);res.who={level:w?.level,name:w?.name,raw:w?.raw};
     const m=await OCR.readMap(allMaps());res.map={name:m?.map?.name,cands:(m?.cands||[]).map(x=>x.name),raw:m?.raw};
+    await put('kv',{exp:null,meso:null,who:null,map:n(BOX.mapWide)},'ocrRegions');await put('kv',[],'mapPrints');await OCR.init();
+    const m2=await OCR.readMap(allMaps());res.mapWide={name:m2?.map?.name,cands:(m2?.cands||[]).map(x=>x.name),raw:m2?.raw};
     return res;},[C,IMG,BOX]);
-  const chk={level:out.who.level===63,name:out.who.name==='TNAKRIZ',exp_tight:out.exp_tight.exp?.exp===40652&&out.exp_tight.exp?.pct===2.86,exp_wide:out.exp_wide.exp?.exp===40652&&out.exp_wide.exp?.pct===2.86,map:out.map.name==='Camp 1'||out.map.cands[0]==='Camp 1'};
+  const chk={level:out.who.level===63,name:out.who.name==='TNAKRIZ',exp_tight:out.exp_tight.exp?.exp===40652&&out.exp_tight.exp?.pct===2.86,exp_wide:out.exp_wide.exp?.exp===40652&&out.exp_wide.exp?.pct===2.86,map:out.map.name==='Camp 1'||out.map.cands[0]==='Camp 1',mapWide:out.mapWide.name==='Camp 1'||out.mapWide.cands[0]==='Camp 1'};
   for(const k in chk){total++;pass+=chk[k];}
   console.log(C.name,JSON.stringify(chk));console.log('   ',JSON.stringify(out),errs.join(';'));await ctx.close();}
 console.log(`REAL HUD PASS ${pass}/${total}`);await b.close();})();
