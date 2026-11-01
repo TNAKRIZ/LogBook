@@ -1072,10 +1072,11 @@ const OCR=(()=>{
     const scale=force||Math.max(3,Math.min(8,Math.round(96/sh))),W=sw*scale,H=sh*scale;
     const c=document.createElement('canvas');c.width=W;c.height=H;const g=c.getContext('2d',{willReadFrequently:true});
     g.imageSmoothingEnabled=smooth;g.imageSmoothingQuality='high';g.drawImage(video,sx,sy,sw,sh,0,0,W,H);   // smooth suits anti-aliased text, nearest suits bitmap fonts
-    const d=g.getImageData(0,0,W,H).data,n=W*H,L=new Float32Array(n),S=new Float32Array(n);
-    for(let i=0;i<n;i++){const R=d[i*4],G=d[i*4+1],B=d[i*4+2],mx=Math.max(R,G,B),mn=Math.min(R,G,B);L[i]=.299*R+.587*G+.114*B;S[i]=mx>40?(mx-mn)/mx:0;}
+    const d=g.getImageData(0,0,W,H).data,n=W*H,L=new Float32Array(n),S=new Float32Array(n),Hu=new Float32Array(n);
+    for(let i=0;i<n;i++){const R=d[i*4],G=d[i*4+1],B=d[i*4+2],mx=Math.max(R,G,B),mn=Math.min(R,G,B),c=mx-mn;L[i]=.299*R+.587*G+.114*B;S[i]=mx>40?c/mx:0;
+      Hu[i]=!c?0:mx===R?(60*((G-B)/c)+360)%360:mx===G?60*((B-R)/c)+120:60*((R-G)/c)+240;}
     const ev=document.createElement('canvas');ev.width=sw;ev.height=sh;ev.getContext('2d').drawImage(video,sx,sy,sw,sh,0,0,sw,sh);
-    return {L,S,W,H,scale,raw:ev};
+    return {L,S,Hu,W,H,scale,raw:ev};
   }
   function otsu(L){const hist=new Array(256).fill(0);for(const v of L)hist[v|0]++;const n=L.length;let sum=0;for(let i=0;i<256;i++)sum+=i*hist[i];
     let sB=0,wB=0,best=-1,th=128;for(let t=0;t<256;t++){wB+=hist[t];if(!wB)continue;const wF=n-wB;if(!wF)break;sB+=t*hist[t];const mB=sB/wB,mF=(sum-sB)/wF,v=wB*wF*(mB-mF)**2;if(v>best){best=v;th=t;}}return th;}
@@ -1309,8 +1310,43 @@ const OCR=(()=>{
     return {level:lv?+lv:null,job:jb?jb.split('|')[0]||null:null,branch:jb?jb.split('|')[1]||null:null,name:nm,
       char:nm?known.find(c=>c.name===nm)||null:null};
   }
+  /* The level number on the HUD is drawn in orange/yellow (the name is white, the job grey). Cut out just those digits
+     and read them several ways with a digits-only reader — in a general text read, 6 and 8 (and 3/8, 5/6) get mixed up. */
+  const P_LEVEL={tessedit_char_whitelist:'0123456789',tessedit_pageseg_mode:'7'};
+  function levelCanvases(r){
+    const out=[];const vh=video.videoHeight;if(!vh||!r)return out;const sh=Math.max(4,Math.round(r.h*vh));
+    for(const smooth of [true,false]){const cr=grabCrop(r,smooth,Math.max(3,Math.min(8,Math.round(140/sh))));if(!cr)continue;const {L,S,Hu,W,H}=cr;
+      const warm=i=>S[i]>0.35&&L[i]>70&&Hu[i]>=8&&Hu[i]<=62;
+      // columns holding warm pixels → the widest run of them (gaps up to a glyph gap) = the level number
+      const col=new Uint16Array(W);for(let y=0;y<H;y++)for(let x=0;x<W;x++)if(warm(y*W+x))col[x]++;
+      const minC=Math.max(2,H*0.04),gap=Math.round(H*0.18);let runs=[],a=-1,last=-1e9;
+      for(let x=0;x<W;x++)if(col[x]>=minC){if(a<0||x-last>gap){if(a>=0)runs.push([a,last]);a=x;}last=x;}if(a>=0)runs.push([a,last]);
+      runs=runs.map(([x0,x1])=>{let m=0;for(let x=x0;x<=x1;x++)m+=col[x];return {x0,x1,m};}).filter(r=>r.m>H*1.5);
+      if(!runs.length)continue;const run=runs.sort((p,q)=>q.m-p.m)[0];
+      let y0=H,y1=-1;for(let y=0;y<H;y++)for(let x=run.x0;x<=run.x1;x++)if(warm(y*W+x)){if(y<y0)y0=y;if(y>y1)y1=y;}
+      if(y1-y0<6)continue;
+      const pad=Math.round((y1-y0)*0.5),X0=Math.max(0,run.x0-pad),X1=Math.min(W-1,run.x1+pad),Y0=Math.max(0,y0-pad),Y1=Math.min(H-1,y1+pad),cw=X1-X0+1,ch=Y1-Y0+1;
+      const sub=new Float32Array(cw*ch);for(let y=0;y<ch;y++)for(let x=0;x<cw;x++)sub[y*cw+x]=L[(y+Y0)*W+x+X0];const th=otsu(sub);
+      const mk=f=>{const c=document.createElement('canvas');c.width=cw+40;c.height=ch+40;const g=c.getContext('2d');const img=g.createImageData(cw+40,ch+40);img.data.fill(255);
+        for(let y=0;y<ch;y++)for(let x=0;x<cw;x++)if(f((y+Y0)*W+x+X0,y*cw+x)){const o=((y+20)*(cw+40)+x+20)*4;img.data[o]=img.data[o+1]=img.data[o+2]=0;}g.putImageData(img,0,0);return c;};
+      out.push(mk(i=>warm(i)));                                       // the orange glyphs only
+      out.push(mk((i,j)=>sub[j]>th));                                 // brightness cut inside the number's box
+      out.push(mk(i=>S[i]>0.25&&L[i]>110&&Hu[i]>=5&&Hu[i]<=70));}    // a looser colour cut (thin strokes at small sizes)
+    return out;}
+  async function readLevelDigits(w){
+    const C=levelCanvases(regions.who);if(!C.length)return null;const reads=[];
+    await w.setParameters(P_LEVEL);pMode='level';
+    try{for(const c of C){const t=(await w.recognize(c)).data.text.replace(/[^\d]/g,'');if(t.length>=1&&t.length<=3&&+t>=1&&+t<=200)reads.push(t);}}
+    finally{await useParams(w,false);}
+    if(!reads.length)return null;const cnt=new Map();for(const t of reads)cnt.set(t,(cnt.get(t)||0)+1);
+    const top=[...cnt].sort((a,b)=>b[1]-a[1]);return {level:+top[0][0],votes:top[0][1],of:reads.length,second:top[1]?+top[1][0]:null,reads};}
   async function readWho(known){if(!stream||!regions.who||!video.videoWidth||isBlack())return null;const w=await ensure();
-    const texts=await readWords(w,'who');const r=parseWho(texts,known||[]);r.raw=texts.map(t=>t.replace(/\s+/g,' ').trim()).join(' | ');return r;}
+    const texts=await readWords(w,'who');const r=parseWho(texts,known||[]);r.raw=texts.map(t=>t.replace(/\s+/g,' ').trim()).join(' | ');
+    try{const d=await readLevelDigits(w);if(d){r.levelDigits=d;r.raw+=` | LV: ${d.reads.join(',')}`;
+      // the digits-only read decides when it is clear (most of its reads agree), or when the text read found no level
+      if(d.votes>=2&&d.votes*2>d.of||r.level==null)r.level=d.level;
+      r.levelSure=d.votes>=2&&d.votes*2>d.of&&(r.level===d.level);}}catch(e){}
+    return r;}
   // OCR often reads roman numerals with l / 1 / | instead of I ("Ill" → "iii", "Vili" → "viii")
   const romanFix=x=>/^[ivxl1|]+$/i.test(x)&&/[ivx]/i.test(x)?x.toLowerCase().replace(/[l1|]/g,'i'):x;
   function matchMap(texts,maps){
@@ -1867,6 +1903,21 @@ $('s_ocrRead').onclick=()=>ocrConfirm('s');$('e_ocrRead').onclick=()=>ocrConfirm
 
 /* ---- pick the character and the map from what is on screen ---- */
 let whoSeen=null,mapSeen=null;
+/* A level read from the HUD must make sense next to the character's last saved level: never lower, at most a few higher.
+   If it doesn't, try the digits the reader is known to mix up (6↔8, 3↔8, 5↔6, 0↔8, 1↔7, 9↔8) one at a time. */
+const LV_CONFUSE={'0':'8691','1':'74','3':'85','4':'1','5':'63','6':'850','7':'1','8':'6309','9':'80'};
+const LV_AHEAD=5;
+function checkLevel(read,ref,alts=[]){
+  if(read==null)return {level:null,sure:false};
+  if(ref==null)return {level:read,sure:null};                                     // nothing to compare with (new character)
+  const ok=L=>L>=ref&&L<=ref+LV_AHEAD;if(ok(read))return {level:read,sure:true};
+  const cand=new Set(alts.filter(ok));const d=String(read);
+  for(let i=0;i<d.length;i++)for(const c of LV_CONFUSE[d[i]]||''){const L=+(d.slice(0,i)+c+d.slice(i+1));if(ok(L))cand.add(L);}
+  if(!cand.size)return {level:null,sure:false,read};
+  const best=[...cand].sort((a,b)=>a-b)[0];                                          // nearest to the last level
+  return {level:best,sure:true,fixed:read};
+}
+let levelCheck=null;   // the last level check from the screen (shown in the summary card)
 async function detectWho(){
   const box=$('whoNote');if(!stream||!OCR.has('who')){box.innerHTML='';return;}
   box.innerHTML='⏳ กำลังอ่านชื่อและเลเวลจากจอ…';
@@ -1881,7 +1932,11 @@ async function detectWho(){
     if(r.branch&&[...$('nc_branch').options].some(o=>o.value===r.branch))$('nc_branch').value=r.branch;
     box.innerHTML=`🔎 อ่านจากจอ: ${bits} — ยังไม่มีในโปรไฟล์ <b>เติมช่องสร้างตัวละครใหม่ให้แล้ว</b> ตรวจชื่อแล้วกด Next ได้เลย`;}
   else box.innerHTML=`🔎 อ่านจากจอ: ${bits} — อ่านชื่อไม่ชัด เลือกตัวละครเองนะคะ`;
-  if(r.level){const L=$('s_level');if(L.value===''||L.dataset.auto==='1'){L.value=r.level;L.dataset.auto='1';}}
+  const chosen=r.char||charOf($('s_char').value),ref=chosen?.last?.level??null;
+  levelCheck=checkLevel(r.level,ref,[r.levelDigits?.second].filter(v=>v!=null));levelCheck.ref=ref;
+  if(levelCheck.level!=null){const L=$('s_level');if(L.value===''||L.dataset.auto==='1'){L.value=levelCheck.level;L.dataset.auto='1';}
+    if(levelCheck.fixed!=null)box.innerHTML+=` <span class="small">· เลเวลอ่านได้ ${levelCheck.fixed} → แก้เป็น <b>${levelCheck.level}</b> (รอบก่อน Lv.${ref})</span>`;}
+  else if(r.level!=null)box.innerHTML+=` <span class="warn small">· เลเวลอ่านได้ ${r.level} ไม่เข้ากับรอบก่อน (Lv.${ref}) — ไม่ได้ใส่ให้ ตรวจเองนะคะ</span>`;
 }
 async function detectMap(){
   const box=$('mapNote');if(!stream||!OCR.has('map')){box.innerHTML='';return;}
@@ -1902,7 +1957,7 @@ document.addEventListener('lb-regions',()=>{if(active)return;clearTimeout(detect
     if(OCR.hasRegions()&&!$('ocrOn').checked){$('ocrOn').checked=true;$('ocrOn').dispatchEvent(new Event('change'));}  // start live reading too
     if(!active&&['screen','ocr'].includes(SW.cur())){whoSeen=null;mapSeen=null;detectAll();}},1500);});
 async function detectAll(){
-  const box=$('detectAll');mountDetect();if(active||!stream||!OCR.hasAny()){box.innerHTML='';return;}
+  levelCheck=null;const box=$('detectAll');mountDetect();if(active||!stream||!OCR.hasAny()){box.innerHTML='';return;}
   box.innerHTML='<p class="muted small" style="margin:0">⏳ กำลังอ่านชื่อ เลเวล แมพ EXP และเงินจากจอ…</p>';
   try{
     if(OCR.has('who'))await detectWho();
@@ -1920,12 +1975,13 @@ async function detectAll(){
     const need=[];
     if(!(ch?.name))need.push('char');
     if(!m)need.push('map');
-    if(num($('s_level').value)==null||!r?.exp||r.expSure===false||r.meso==null||r.mesoSure===false)need.push('stats');
+    const lvUnsure=levelCheck&&levelCheck.level==null;
+    if(lvUnsure||num($('s_level').value)==null||!r?.exp||r.expSure===false||r.meso==null||r.mesoSure===false)need.push('stats');
     const row=(k,v,sure=true)=>`<span>${k}</span><span>${v?`${v} ${sure?'✓':'<span class="warn small">⚠ ไม่แน่ใจ ตรวจในขั้นนั้น</span>'}`:'<span class="muted">อ่านไม่ได้ — กรอกเองในขั้นนั้น</span>'}</span>`;
     const pic=(img)=>img?`<img class="detimg" alt="" src="${img}">`:'';
     box.innerHTML=`<h4>🔎 อ่านจากจอได้</h4><div class="grid2">
       ${row('ตัวละคร',ch?.name?esc(ch.name)+($('s_char').value==='__new'?' <span class="tag">ใหม่</span>':''):null)}
-      ${row('เลเวล',$('s_level').value?'Lv.'+esc($('s_level').value):null)}
+      ${row('เลเวล',$('s_level').value?'Lv.'+esc($('s_level').value)+(levelCheck?.fixed!=null?` <span class="muted small">(อ่านได้ ${levelCheck.fixed} · แก้จากเลเวลรอบก่อน)</span>`:''):null,!lvUnsure)}
       ${row('แมพ',m?esc(m.name):null)}
       ${row('EXP',r?.exp?`${pic(r.imgExp)}${r.exp.est?'≈':''}${fmt(r.exp.exp)}${r.exp.pct!=null?` (${r.exp.pct}%)`:''}${r.exp.est?' <span class="muted small">คิดจาก %</span>':''}`:null,r?.expSure!==false)}
       ${row('เงิน',r?.meso!=null?`${pic(r.imgMeso)}${fmt(r.meso)} mesos`:null,r?.mesoSure!==false)}</div>
