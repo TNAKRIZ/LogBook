@@ -1115,6 +1115,8 @@ const OCR=(()=>{
     const top=mid-modeH/2,lineX0=live[0].x0,lineX1=live[live.length-1].x1;
     // glyphs that start in the lower half of the line are commas/dots (thick outlined fonts make them big enough to pass the size filter)
     live=live.filter(c=>c.y0-top<=modeH*0.4);if(!live.length)return null;
+    {const hs=live.map(c=>c.h).sort((a,b)=>a-b),mh0=hs[hs.length>>1];let k=0;      // a bold label ("EXP.") before the number: taller glyphs at the left
+      while(k<live.length-3&&live[k].h>mh0*1.15)k++;if(k>=2)live=live.slice(k);}
     // decimal points: small blobs sitting on the baseline inside the text line (commas are removed the same way, they never get drawn)
     const dots=comps.filter(c=>c&&c.x0>0&&c.y0>0&&c.x1<W-1&&c.y1<H-1&&c.h<modeH*0.42&&c.w<modeH*0.5&&c.area>=scale*scale*0.8
       &&c.y0>=top+modeH*0.55&&c.y1<=top+modeH*1.25&&c.x0>lineX0&&c.x1<lineX1);
@@ -1193,7 +1195,15 @@ const OCR=(()=>{
      0.01% is the finest step (~135 EXP at Lv.61); totals are end − start, so that never adds up over a session.
      A number read where the game cannot show one (≥ 1,000,000) is a misread, so the % wins there too. */
   const EXP_HIDE=1e6;
+  // the bracket before the % got lost and the digits ran together ("40652" + "286" → "40652286"): split where both fit the table
+  function splitJoined(v){
+    if(!v||typeof EXP_REQ==='undefined')return v;const L=levelHint??st.level;if(L==null)return v;const d=String(v.exp);
+    if(v.pct!=null&&expFitsAt(v,L))return v;
+    for(const k of [3,4]){if(d.length<=k+1)continue;const e=+d.slice(0,-k),p=+d.slice(-k)/100;
+      for(const LL of [L,L+1])if(p<=100&&expFitsAt({exp:e,pct:p},LL))return {exp:e,pct:p};}
+    return v;}
   function fromPct(v){
+    if(v&&v.exp!=null)v=splitJoined(v);
     if(!v||v.pct==null||typeof EXP_REQ==='undefined')return v;
     const L=levelHint??st.level,R=L!=null?EXP_REQ[L]:0;
     const est=R?Math.round(R*v.pct/100):null,hidden=est!=null&&est>=EXP_HIDE;
@@ -1274,6 +1284,8 @@ const OCR=(()=>{
   const P_WORDS={tessedit_char_whitelist:"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789 .:<>-'(),/",tessedit_pageseg_mode:'6'};
   let pMode='digits';
   async function useParams(w,words){const k=words?'words':'digits';if(pMode!==k){await w.setParameters(words?P_WORDS:P_DIGITS);pMode=k;}}
+  // threshold for white letters: clearly brighter than the typical (median) background of the box
+  const whiteCut=L=>{const a=Array.from(L).sort((x,y)=>x-y);const med=a[a.length>>1];return Math.max(165,Math.min(235,med+30));};
   function wordCanvases(r,white=false){
     const vh=video.videoHeight;if(!vh||!r)return [];const sh=Math.max(4,Math.round(r.h*vh));
     const cr=grabCrop(r,true,Math.max(2,Math.min(6,Math.round(160/sh))));if(!cr)return [];
@@ -1281,9 +1293,9 @@ const OCR=(()=>{
     const mk=f=>{const c=document.createElement('canvas');c.width=W+24;c.height=H+24;const g=c.getContext('2d');const img=g.createImageData(W+24,H+24);img.data.fill(255);
       for(let y=0;y<H;y++)for(let x=0;x<W;x++){const v=f(L[y*W+x]),o=((y+12)*(W+24)+x+12)*4;img.data[o]=img.data[o+1]=img.data[o+2]=v;}g.putImageData(img,0,0);return c;};
     const out=[mk(v=>inv?255-v:v),mk(v=>((v>th)===inv)?0:255)];      // grey (text dark) and a hard black/white version
-    if(white){const {S}=cr;const c=document.createElement('canvas');c.width=W+24;c.height=H+24;const g=c.getContext('2d');const img=g.createImageData(W+24,H+24);img.data.fill(255);
+    if(white){const {S}=cr;const wt=whiteCut(L);const c=document.createElement('canvas');c.width=W+24;c.height=H+24;const g=c.getContext('2d');const img=g.createImageData(W+24,H+24);img.data.fill(255);
       // only near-white, colourless pixels: the title letters, not the coloured map art behind them
-      for(let y=0;y<H;y++)for(let x=0;x<W;x++){const i=y*W+x;if(L[i]>165&&S[i]<0.22){const o=((y+12)*(W+24)+x+12)*4;img.data[o]=img.data[o+1]=img.data[o+2]=0;}}
+      for(let y=0;y<H;y++)for(let x=0;x<W;x++){const i=y*W+x;if(L[i]>wt&&S[i]<0.25){const o=((y+12)*(W+24)+x+12)*4;img.data[o]=img.data[o+1]=img.data[o+2]=0;}}
       g.putImageData(img,0,0);out.unshift(c);}
     return out;
   }
@@ -1306,7 +1318,9 @@ const OCR=(()=>{
       for(const tk of toks){const j=JOB_WORDS.find(([w])=>near(tk,w));if(j){jobHit=j;break;}}
       if(jobHit){let br=jobHit[2];if(jobHit[0]==='Wizard')br=/fire|poison|f\s*\/\s*p/i.test(t)?'F/P Wizard':/ice|light|i\s*\/\s*l/i.test(t)?'I/L Wizard':null;add('job',jobHit[1]+'|'+(br||''));}
       for(const tk of toks){if(/^\d+$/.test(tk)||/^l?v$/i.test(tk)||JOB_WORDS.some(([w])=>near(tk,w))||tk.length>13)continue;
-        const k=known.find(c=>near(tk,c.name));add('name',k?k.name:tk);}
+        let k=known.find(c=>near(tk,c.name));
+        for(let n=Math.min(tk.length,5);!k&&n>=3;n--){const end=tk.toLowerCase().slice(-n);const part=known.filter(c=>c.name.toLowerCase().endsWith(end));if(part.length===1)k=part[0];}
+        add('name',k?k.name:tk);}
     }
     const best=k=>{let b=null,n=0;for(const [key,c] of vote)if(key.startsWith(k+':')&&c>n){n=c;b=key.slice(k.length+1);}return b;};
     const bestName=()=>{const names=[...vote].filter(([k])=>k.startsWith('name:')).map(([k,c])=>({n:k.slice(5),c}));if(!names.length)return null;
@@ -1337,22 +1351,11 @@ const OCR=(()=>{
       const sub=new Float32Array(cw*ch);for(let y=0;y<ch;y++)for(let x=0;x<cw;x++)sub[y*cw+x]=L[(y+Y0)*W+x+X0];const th=otsu(sub);
       const mk=f=>{const c=document.createElement('canvas');c.width=cw+40;c.height=ch+40;const g=c.getContext('2d');const img=g.createImageData(cw+40,ch+40);img.data.fill(255);
         for(let y=0;y<ch;y++)for(let x=0;x<cw;x++)if(f((y+Y0)*W+x+X0,y*cw+x)){const o=((y+20)*(cw+40)+x+20)*4;img.data[o]=img.data[o+1]=img.data[o+2]=0;}g.putImageData(img,0,0);return c;};
-      // MapleStory Classic: each level digit is WHITE inside its own ORANGE tile. Find the tiles (warm, filled, roughly square),
-      // then take the white pixels inside them — one clean digit per tile, already separated.
-      {const seen=new Uint8Array(W*H),tiles=[];
-        for(let y0s=Y0;y0s<=Y1;y0s++)for(let x0s=X0;x0s<=X1;x0s++){const st0=y0s*W+x0s;if(seen[st0]||!warm(st0))continue;
-          const q=[st0];seen[st0]=1;let a=0,bx0=x0s,bx1=x0s,by0=y0s,by1=y0s;
-          while(q.length){const i=q.pop();a++;const x=i%W,y=(i/W)|0;if(x<bx0)bx0=x;if(x>bx1)bx1=x;if(y<by0)by0=y;if(y>by1)by1=y;
-            for(const j of [i-1,i+1,i-W,i+W]){if(j<0||j>=W*H||seen[j])continue;const jx=j%W;if(Math.abs(jx-x)>1)continue;if(warm(j)){seen[j]=1;q.push(j);}}}
-          const tw=bx1-bx0+1,th2=by1-by0+1;if(th2>=(y1-y0)*0.6&&tw>=th2*0.5&&tw<=th2*1.5&&a>=tw*th2*0.35)tiles.push({bx0,bx1,by0,by1});}
-        if(tiles.length){tiles.sort((p,q)=>p.bx0-q.bx0);const th3=Math.max(...tiles.map(t=>t.by1-t.by0+1)),gapW=Math.round(th3*0.35);
-          const cw2=tiles.reduce((s2,t)=>s2+(t.bx1-t.bx0+1)+gapW,0)+40,ch2=th3+40;const c=document.createElement('canvas');c.width=cw2;c.height=ch2;
-          const g=c.getContext('2d');const img=g.createImageData(cw2,ch2);img.data.fill(255);let ox=20;
-          for(const t of tiles){const inset=Math.max(1,Math.round((t.by1-t.by0)*0.08));
-            for(let y=t.by0+inset;y<=t.by1-inset;y++)for(let x=t.bx0+inset;x<=t.bx1-inset;x++){const i=y*W+x;
-              if(!warm(i)&&L[i]>150&&S[i]<0.35){const o=((y-t.by0+20)*cw2+(x-t.bx0+ox))*4;img.data[o]=img.data[o+1]=img.data[o+2]=0;}}
-            ox+=(t.bx1-t.bx0+1)+gapW;}
-          g.putImageData(img,0,0);out.push(c);out.push(c);}}         // counted twice: the cleanest cut when the HUD uses tiles
+      // MapleStory Classic: each level digit is WHITE inside its own ORANGE tile (the tiles touch). Inside the tiles' box,
+      // the digits are the bright pixels that are not orange — drawn black on white, that is one clean digit per tile.
+      {const inner=(i)=>!warm(i)&&L[i]>175&&S[i]<0.5;let n=0;for(let y=y0;y<=y1;y++)for(let x=run.x0;x<=run.x1;x++)if(inner(y*W+x))n++;
+        const area=(y1-y0+1)*(run.x1-run.x0+1);
+        if(n>area*0.06&&n<area*0.6){const c=mk((i)=>{const x=i%W,y=(i/W)|0;return x>=run.x0&&x<=run.x1&&y>=y0&&y<=y1&&inner(i);});c.weight=3;out.unshift(c);}}   // the cleanest cut weighs most
       out.push(mk(i=>warm(i)));                                       // the orange glyphs only
       out.push(mk((i,j)=>sub[j]>th));                                 // brightness cut inside the number's box
       out.push(mk(i=>S[i]>0.25&&L[i]>110&&Hu[i]>=5&&Hu[i]<=70));}    // a looser colour cut (thin strokes at small sizes)
@@ -1360,16 +1363,20 @@ const OCR=(()=>{
   async function readLevelDigits(w){
     const C=levelCanvases(regions.who);if(!C.length)return null;const reads=[];
     await w.setParameters(P_LEVEL);pMode='level';
-    try{for(const c of C){const t=(await w.recognize(c)).data.text.replace(/[^\d]/g,'');if(t.length>=1&&t.length<=3&&+t>=1&&+t<=200)reads.push(t);}}
+    const wts=[];
+    try{for(const c of C){const t=(await w.recognize(c)).data.text.replace(/[^\d]/g,'');if(t.length>=1&&t.length<=3&&+t>=1&&+t<=200){reads.push(t);wts.push(c.weight||1);}}}
     finally{await useParams(w,false);}
-    if(!reads.length)return null;const cnt=new Map();for(const t of reads)cnt.set(t,(cnt.get(t)||0)+1);
-    const top=[...cnt].sort((a,b)=>b[1]-a[1]);return {level:+top[0][0],votes:top[0][1],of:reads.length,second:top[1]?+top[1][0]:null,reads};}
+    if(!reads.length)return null;const cnt=new Map();reads.forEach((t,i)=>cnt.set(t,(cnt.get(t)||0)+wts[i]));
+    // a read that lost a digit ("3" of "63") supports the longer read it is part of
+    for(const [t,c] of [...cnt]){const longer=[...cnt.keys()].filter(u=>u.length>t.length&&u.endsWith(t)||u.length>t.length&&u.startsWith(t));if(longer.length===1){cnt.set(longer[0],cnt.get(longer[0])+c*0.5);cnt.set(t,c*0.5);}}
+    const of=wts.reduce((a,b)=>a+b,0),top=[...cnt].sort((a,b)=>b[1]-a[1]);
+    return {level:+top[0][0],votes:top[0][1],of,second:top[1]?+top[1][0]:null,reads};}
   async function readWho(known){if(!stream||!regions.who||!video.videoWidth||isBlack())return null;const w=await ensure();
     const texts=await readWords(w,'who');const r=parseWho(texts,known||[]);r.raw=texts.map(t=>t.replace(/\s+/g,' ').trim()).join(' | ');
     try{const d=await readLevelDigits(w);if(d){r.levelDigits=d;r.raw+=` | LV: ${d.reads.join(',')}`;
       // the digits-only read decides when it is clear (most of its reads agree), or when the text read found no level
-      if(d.votes>=2&&d.votes*2>d.of||r.level==null)r.level=d.level;
-      r.levelSure=d.votes>=2&&d.votes*2>d.of&&(r.level===d.level);}}catch(e){}
+      // the digits-only read decides (the general text read mixes 6/8 and sees the orange tiles as 8s)
+      r.textLevel=r.level;r.level=d.level;r.levelSure=d.votes>=2&&d.votes*2>d.of;}}catch(e){}
     return r;}
   // OCR often reads roman numerals with l / 1 / | instead of I ("Ill" → "iii", "Vili" → "viii")
   const romanFix=x=>/^[ivxl1|]+$/i.test(x)&&/[ivx]/i.test(x)?x.toLowerCase().replace(/[l1|]/g,'i'):x;
@@ -1390,7 +1397,7 @@ const OCR=(()=>{
      which map it is, its picture is stored; next time the picture is compared with the stored ones — no letters to read. */
   function titlePrint(){
     const r=regions.map;if(!r)return null;const cr=grabCrop(r,false,1);if(!cr)return null;const {L,S,W,H}=cr;
-    const on=i=>L[i]>165&&S[i]<0.22;let x0=W,x1=-1,y0=H,y1=-1,n=0;
+    const wt=whiteCut(L),on=i=>L[i]>wt&&S[i]<0.25;let x0=W,x1=-1,y0=H,y1=-1,n=0;
     for(let y=0;y<H;y++)for(let x=0;x<W;x++)if(on(y*W+x)){n++;if(x<x0)x0=x;if(x>x1)x1=x;if(y<y0)y0=y;if(y>y1)y1=y;}
     if(n<12||x1-x0<6||y1-y0<3)return null;
     const GW=96,GH=12,bw=x1-x0+1,bh=y1-y0+1,bits=new Array(GW*GH).fill(0);
@@ -1645,7 +1652,7 @@ const OCR=(()=>{
   }
   function restart(){const was=!!timer;reset(true);   // ↺ keeps the level: the EXP table check needs it from the first read
 renderLog();render();$('ocrHint').textContent='↺ เริ่มนับใหม่แล้ว — ตัวเลขจะขึ้นอีกครั้งในไม่กี่วินาที';if(was)start();else if(stream)readOnce();}
-  return {init,live,setTicker,readNow,seed,restart,rememberMap,checkBoxes,_titlePrint:titlePrint,_printSim:printSim,_variants:k=>{const V=variants(regions[k]);return V?V.list.map(v=>({tag:v.tag,count:v.count,modeH:v.modeH,img:v.canvas.toDataURL()})):null;},hasRegions:()=>!!(regions.exp||regions.meso),hasAny:()=>Object.values(regions).some(Boolean),has:k=>!!regions[k],readWho,readMap,_readNow:readNow,reset:()=>{reset();render();},snapshot:()=>({expGained:st.expGained,mesoCollected:st.mesoCollected,t0:st.t0}),stop,drawBoxes,_parseExp:parseExp,_parseMeso:parseMeso,_st:st,_accExp:acceptExp,_reqNow:reqNow,_accMeso:acceptMeso,_repairExp:v=>repairExp(v),_fitLevels:fitLevels,_setHint:h=>{levelHint=h;}};
+  return {init,live,setTicker,readNow,seed,restart,rememberMap,checkBoxes,_levelCanvases:()=>levelCanvases(regions.who).map(c=>c.toDataURL()),_titlePrint:titlePrint,_printSim:printSim,_variants:k=>{const V=variants(regions[k]);return V?V.list.map(v=>({tag:v.tag,count:v.count,modeH:v.modeH,img:v.canvas.toDataURL()})):null;},hasRegions:()=>!!(regions.exp||regions.meso),hasAny:()=>Object.values(regions).some(Boolean),has:k=>!!regions[k],readWho,readMap,_readNow:readNow,reset:()=>{reset();render();},snapshot:()=>({expGained:st.expGained,mesoCollected:st.mesoCollected,t0:st.t0}),stop,drawBoxes,_parseExp:parseExp,_parseMeso:parseMeso,_st:st,_accExp:acceptExp,_reqNow:reqNow,_accMeso:acceptMeso,_repairExp:v=>repairExp(v),_fitLevels:fitLevels,_setHint:h=>{levelHint=h;}};
 })();
 
 // two taps within 3 s → start counting again from what is on screen now (regions are kept)
