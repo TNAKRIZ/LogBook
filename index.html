@@ -1558,7 +1558,13 @@ const OCR=(()=>{
     // (the LV box may already show the new one); bank its full table value, then continue on the next level.
     const oldL=st.levelAtExp??st.level,Rold=oldL!=null&&typeof EXP_REQ!=='undefined'&&EXP_REQ[oldL]?EXP_REQ[oldL]:R;
     const pctNew=v.next&&v.exp===e?v.pct:pct;
-    if(e<st.exp&&Rold&&st.exp<Rold*1.01&&st.pct!=null&&pctNew!=null&&st.pct>60&&st.pct<=100&&pctNew<40){
+    // …but only when it is possible: the EXP still needed to finish the old level plus what is now on the new bar must fit
+    // in what can be earned in the time since the last read — or the LV box already shows the next level.
+    // (two misreads like 64.34% → 4.33% look like a wrap, but 64% cannot reach 100% in one read.)
+    const dtW=Math.max(1,(t-(st.lastExpT||t))/1000),stepMax=Rold?Math.max(Rold*0.01,Rold*0.0005*dtW):0;
+    const wrapFits=Rold&&st.exp!=null&&(Rold-st.exp)+e<=stepMax+Rold*0.002;                                  // 0.2%: rounding of % estimates
+    const lvSays=oldL!=null&&st.level===oldL+1&&st.levelSrc!=='wrap';
+    if(e<st.exp&&Rold&&st.exp<Rold*1.01&&st.pct!=null&&pctNew!=null&&st.pct>60&&st.pct<=100&&pctNew<40&&(wrapFits||lvSays)){
       creditGain(t);st.expCarry+=Math.max(0,Rold-st.expBase);st.expBase=0;st.reqs.length=0;
       if(oldL!=null&&typeof EXP_REQ!=='undefined'&&EXP_REQ[oldL+1]){
         if(st.level!==oldL+1){st.level=oldL+1;st.levelSrc='wrap';}st.lvVotes=[];
