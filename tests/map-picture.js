@@ -1,5 +1,5 @@
 // Map title remembered as a picture: after the player confirms a map once, the same title is recognised without reading letters,
-// a different title is not mistaken for it, and an empty box is flagged.
+// a different title is not mistaken for it, and an empty Meso box (inventory closed) is NOT a warning — the reader waits for it.
 const {chromium}=require('playwright');
 (async()=>{const b=await chromium.launch();const ctx=await b.newContext();
 await ctx.addInitScript(()=>{window.LB_OCR={src:'/node_modules/tesseract.js/dist/tesseract.min.js',workerPath:'/node_modules/tesseract.js/dist/worker.min.js',corePath:'/node_modules/tesseract.js-core',langPath:'/node_modules/@tesseract.js-data/eng/4.0.0_best_int'};});
@@ -18,6 +18,6 @@ const r=await p.evaluate(async()=>{const W=1280,H=720;const cv=document.createEl
   window.TITLE=other.name;await new Promise(r=>setTimeout(r,500));const diff=await OCR.readMap(maps);
   const warn=await OCR.checkBoxes();
   return {same:{name:same?.map?.name,pic:!!same?.byPicture,raw:same?.raw},diff:{name:diff?.map?.name,pic:!!diff?.byPicture,cands:(diff?.cands||[]).map(m=>m.name),other:other.name},warn};});
-const ok1=r.same.pic&&r.same.name==='Ant Tunnel II', ok2=!r.diff.pic, ok3=r.warn.some(w=>w.includes('Meso'));
-console.log(JSON.stringify(r));console.log('same title by picture',ok1,'| other title not mistaken',ok2,'| empty box flagged',ok3,'| ERR',errs);
+const ok1=r.same.pic&&r.same.name==='Ant Tunnel II', ok2=!r.diff.pic, ok3=!r.warn.some(w=>w.includes('Meso'));
+console.log(JSON.stringify(r));console.log('same title by picture',ok1,'| other title not mistaken',ok2,'| closed inventory not flagged',ok3,'| ERR',errs);
 await b.close();process.exit(ok1&&ok2&&ok3&&!errs.length?0:1);})();

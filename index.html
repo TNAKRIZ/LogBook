@@ -276,6 +276,7 @@ footer a{color:inherit}
       <div class="ocrbox">
         <div class="row">
           <b>⚡ อ่านตัวเลขจากจอแบบเรียลไทม์</b>
+          <button class="btn sm" id="ocrAuto" type="button" title="ระบบหากรอบ EXP, เลเวล/ชื่อ, แมพ และเงิน จากภาพเกมเอง — ไม่ต้องลากกรอบ">🧭 ให้ระบบหากรอบเอง</button>
           <button class="btn ghost sm" id="ocrExpBox" type="button">🎯 ตั้งกรอบ EXP</button>
           <button class="btn ghost sm" id="ocrMesoBox" type="button">🎯 ตั้งกรอบ Meso</button>
           <button class="btn ghost sm" id="ocrWhoBox" type="button" title="กรอบเดียวคลุม LV + อาชีพ + ชื่อตัวละคร ที่แถบล่างซ้าย">🎯 กรอบ เลเวล/ชื่อ</button>
@@ -285,7 +286,7 @@ footer a{color:inherit}
           <button class="btn ghost sm" id="ocrSave" type="button" title="บันทึกภาพจอที่ระบบเห็นตอนนี้ เป็นไฟล์ PNG ส่งให้ผู้พัฒนาใช้ทดสอบ">💾 เก็บภาพทดสอบ</button>
           <button class="btn sm" id="pipBtn" type="button" title="หน้าต่างเล็กลอยทับเกม ดูสถิติได้โดยไม่ต้องสลับจอ">🪟 หน้าต่างลอย</button>
         </div>
-        <p class="muted small" id="ocrHint" style="margin:6px 0 0">กด "ตั้งกรอบ" แล้วลากกรอบ<b>ให้แคบ คลุมเฉพาะตัวเลข</b> (ไม่รวมคำว่า EXP, หลอด, ไอคอนเหรียญ หรือปุ่ม) · ครั้งแรกต้องต่อเน็ตเพื่อโหลดตัวอ่านตัวเลข</p>
+        <p class="muted small" id="ocrHint" style="margin:6px 0 0">ระบบหากรอบให้เองตอนเริ่มแชร์จอ · ถ้าบางช่องอ่านไม่ได้ กด "ตั้งกรอบ" แล้วลากกรอบ<b>ให้แคบ คลุมเฉพาะตัวเลข</b> (ไม่รวมคำว่า EXP, หลอด, ไอคอนเหรียญ หรือปุ่ม) · ครั้งแรกต้องต่อเน็ตเพื่อโหลดตัวอ่านตัวเลข</p>
         <div class="ocrzoom" id="ocrZoomWrap" hidden><span class="muted small">ภาพในกรอบ (ขยาย)</span><canvas id="ocrZoom"></canvas></div>
         <div class="stats" id="ocrStats" style="margin-top:8px"></div>
         <div class="row small muted" id="ocrPeek" style="margin-top:6px"></div>
@@ -976,7 +977,9 @@ async function startShare(){
   $('btnShare').disabled=true;$('btnStopShare').disabled=false;$('btnSnap').disabled=false;
   $('shareStatus').innerHTML='<span class="live-dot"></span>กำลังแชร์หน้าจอ — กด Next ไปตั้งกรอบอ่านตัวเลขได้เลย <span class="muted small" id="shareRes"></span>';
   // show the size the browser really captures: fewer pixels than the screen = smaller digits = worse reading
-  video.addEventListener('loadedmetadata',()=>{const el=$('shareRes');if(el)el.textContent=`(ภาพ ${video.videoWidth}×${video.videoHeight})`;},{once:true});setupAuto();$('ocrNeedShare').style.display='none';
+  video.addEventListener('loadedmetadata',()=>{const el=$('shareRes');if(el)el.textContent=`(ภาพ ${video.videoWidth}×${video.videoHeight})`;
+    setTimeout(async()=>{try{const o=await OCR.autoFind();if(o&&Object.keys(o).length){$('ocrHint').textContent=OCR.autoText(o);document.dispatchEvent(new CustomEvent('lb-regions',{detail:'auto'}));
+      if(OCR.hasRegions()&&!$('ocrOn').checked){$('ocrOn').checked=true;$('ocrOn').dispatchEvent(new Event('change'));}if(!active)setTimeout(detectAll,600);}}catch(e){}},700);},{once:true});setupAuto();$('ocrNeedShare').style.display='none';
   if(OCR.hasAny()){$('shareStatus').innerHTML='<span class="live-dot"></span>กำลังแชร์หน้าจอ — ใช้กรอบที่ตั้งไว้ครั้งก่อน อ่านข้อมูลให้แล้วด้านล่าง';
     if(OCR.hasRegions()&&!$('ocrOn').checked){$('ocrOn').checked=true;$('ocrOn').dispatchEvent(new Event('change'));}
     if(!active)setTimeout(detectAll,900);}
@@ -1016,7 +1019,8 @@ const OCR=(()=>{
   let worker=null,loading=null,timer=null,busy=false,drawMode=null,dragStart=null;
   let regions={exp:null,meso:null,who:null,map:null};          // normalised {x,y,w,h} in video-frame space
   const st={};                                // live state
-  function reset(keepLevel=false){Object.assign(st,{expCand:null,mesoCand:null,t0:null,exp:null,pct:null,meso:null,expGained:0,mesoCollected:0,expHist:[],mesoHist:[],lastExpT:null,lastMesoT:null,errExp:0,errMeso:0,black:false,log:[],reqs:[],expWin:[],mesoWin:[],expRej:[],mesoRej:[],level:keepLevel?st.level:null,levelSrc:keepLevel?st.levelSrc:null,lvVotes:[],levelAtExp:null,cycle:0,expBase:0,expCarry:0,mesoBase:0,activeMs:0,lastGainT:null,stillT:null,expRefT:null,expEst:false});}
+  function reset(keepLevel=false){Object.assign(st,{expCand:null,mesoCand:null,t0:null,exp:null,pct:null,meso:null,expGained:0,mesoCollected:0,expHist:[],mesoHist:[],lastExpT:null,lastMesoT:null,errExp:0,errMeso:0,black:false,log:[],reqs:[],expWin:[],mesoWin:[],expRej:[],mesoRej:[],level:keepLevel?st.level:null,levelSrc:keepLevel?st.levelSrc:null,lvVotes:[],levelAtExp:null,cycle:0,expBase:0,expCarry:0,mesoBase:0,activeMs:0,lastGainT:null,stillT:null,expRefT:null,expEst:false,mesoHidden:null,mesoSeenExp:null,lastMesoSeenT:null,hamp:[],kf:null,
+    q:{reads:0,expOk:0,expRej:0,expNone:0,expEst:0,expTpl:0,mesoOk:0,mesoRej:0,mesoNone:0,mesoTpl:0,mesoHiddenReads:0,mesoEst:[],expSteps:0,hampelFlags:0,kalmanHr:null,relocate:0}});}
   reset();
   const ov=()=>$('ocrOverlay');
   /* ---- region drawing ---- */
@@ -1047,7 +1051,7 @@ const OCR=(()=>{
     c.addEventListener('mousedown',e=>{if(!drawMode)return;dragStart=toNorm(e);});
     c.addEventListener('mousemove',e=>{if(!drawMode||!dragStart)return;const p=toNorm(e);const r=rectOf(dragStart,p);drawBoxes(r);zoom(r);});
     window.addEventListener('mouseup',async e=>{if(!drawMode||!dragStart)return;const r=rectOf(dragStart,toNorm(e));dragStart=null;
-      if(r.w>0.005&&r.h>0.004){regions[drawMode]=r;await put('kv',regions,'ocrRegions');await put('kv',{w:video.videoWidth,h:video.videoHeight},'ocrRegionsSize');document.dispatchEvent(new CustomEvent('lb-regions',{detail:drawMode}));}
+      if(r.w>0.005&&r.h>0.004){regions[drawMode]=r;auto.src[drawMode]='manual';if(drawMode==='meso'){auto.anchor=null;AFC.anchor=null;mesoOff=false;st.mesoHidden=null;}await put('kv',auto,'ocrAuto');await put('kv',regions,'ocrRegions');await put('kv',{w:video.videoWidth,h:video.videoHeight},'ocrRegionsSize');document.dispatchEvent(new CustomEvent('lb-regions',{detail:drawMode}));}
       drawMode=null;c.classList.remove('draw');drawBoxes();$('ocrHint').textContent='ตั้งกรอบแล้ว ✅ ติ๊ก "เปิดอ่าน" เพื่อเริ่มอ่านตัวเลข';readOnce();});
     window.addEventListener('resize',()=>drawBoxes());
   }
@@ -1494,8 +1498,128 @@ const OCR=(()=>{
     if(sz&&(Math.abs(sz.w-video.videoWidth)>4||Math.abs(sz.h-video.videoHeight)>4))out.push(`ขนาดภาพเกมเปลี่ยนจากตอนตั้งกรอบ (${sz.w}×${sz.h} → ${video.videoWidth}×${video.videoHeight}) — กรอบอาจไม่ตรงตัวเลขแล้ว ตั้งกรอบใหม่ หรือปรับหน้าต่างเกมให้เท่าเดิม`);
     const name={exp:'EXP',meso:'Meso',who:'เลเวล/ชื่อ',map:'ชื่อแมพ'};
     for(const k of ['exp','meso','who','map']){if(!regions[k])continue;const cr=grabCrop(regions[k],false,1);if(!cr)continue;let mn=255,mx=0;for(const v of cr.L){if(v<mn)mn=v;if(v>mx)mx=v;}
+      if(mx-mn<40&&k==='meso')continue;                                            // inventory closed: normal, the reader waits for it
       if(mx-mn<40)out.push(`กรอบ ${name[k]} ไม่มีตัวหนังสืออยู่เลย — กรอบอาจเลื่อน หรือหน้าต่างนั้นในเกมปิดอยู่`);}
     return out;}
+  /* ---- auto-find: the reader locates the HUD, the minimap and the Meso field by itself ----
+     • HUD (LV/name, EXP): the HP and MP gauges fill from their LEFT edge, so the red and blue fills start at fixed points
+       whatever the HP/MP. Their distance P is the UI's size unit and every HUD box is a fixed offset in P
+       (measured on Harry's screen: HP fill starts at 537, MP at 652, gauge row 808 → P = 115).
+     • Minimap and Meso: windows the player can move or close — found by their picture (normalised cross-correlation,
+       coarse then fine). The built-in picture first; once a read through a box succeeds, the exact picture next to it on
+       THIS screen is learned and used from then on.
+     • A box drawn by hand stays as drawn ('manual'); "🧭 ให้ระบบหากรอบเอง" hands every box back to the finder. */
+  const AF={P:115,who:[-2.017,-0.20,1.39,0.26],exp:[0.983,-0.226,1.26,0.278],map:[0.40,0.174,0.904,0.383],   // map-name lines inside the minimap, from its title bar's top-left (fixture: +46,+20, 104×44)
+   
+    meso:{dx:-59,dy:2,w:90,h:19},tplMap:{src:'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAFAAAAASCAAAAADp6gYWAAAC5klEQVR42qXUv4ucRRgH8O/zzLwz8+67v3J7OcxdPD1MQoogimdjNJBolYCkMNiIhY2VrX9AIFZipYUQSCEGAjaCxEYwhWA0JoiHegde0JhIspvLuZt9995fM4/Froi5u2qnm+Yz3+/Mw9A33Rv7O5lgulVG7CshcdDtq3s6XEzpwSspQ2Qohb7b6Gy1l8OUoOLgtSnTOegrh+3scjJt5SDCPPhp5Rq4zd12kk1bmZkJf331McChimqVwxZtjoggNBQqyFNOQlSKUJ4ThgTJhTx5EkgeaNsSYS9rl04eP8rjE8iikYScUDXYWwCu4twbznsuKsgB7Epf9TU82CnkO4QkgNT6HT3e/fKjX5q/Xj/GXz+/tqaiZ5/orb+s1MYXtnni6urJObr5Q//w8fDZ3o32kYMotd3GCQBhk4QJ+P1HB46uXEtk8SJ9OtwX3z1257uXDG6fX1haTXs4UVy+rUdx9uHT0Zzd2wpB7XiRwjamSeU/z1zAyrm3L2peGp5+/938t35qSiTu7Bt/nHpn9dvL91451f18dOj0m4s3f62s2treVwiiXF1PEs7ecp3MSn/wMK+eTJJ0sxZDMjjT/Fkf7FP+Za9af6Z2oxsdeXU5Gpl4t4SZnYC6Koow0i2TpLP5A5MQjJgyz4q5+fSeS8xbr9kr1++/8F6jSCLUsBXvDBr34gTEgmkt1MnJAnfMDFycNL3WraVad0893u+5NY+Z2kwz3xc0CtY7eCQAqU3QB0nzuQPVwCGDQ2aKKop1VUhgZ8Nw2JEQQgiija6ySptkt8kWGSaXzp0NQZOSTKKWgoWCVcErhrYQMLhh7WQkhBE5r4h2+23yuOnl8V6HNKwpC/NfckXjR5PAgBaAQEAQAhTB7wJSIqU6k34ygA6s/v79MaPgoeCZABEiAUTAVI49iOB/6R5NqlIymXn9KQ1dBbm/cWvICGAEMIkX4sCMMIYhAFQIRBTCvxA/AhYW0aBcrD+gfwAJKj8udZ9wGQAAAABJRU5ErkJggg==',w:80,h:18},tplMeso:{src:'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAFEAAAAYCAAAAACns05OAAADG0lEQVR42q2UTWhcVRTHf+e++z6meVMTzbRmUlraSKVoaXRhWyxSaBYuTIkoVFEXLqSISwWrCxG3btzozm50ISJVsSIoDaIgGlq0ar+rJJJWZxKSTDJfmTf3Xhczk2krmc6AZ/Pe/71zf/dwz/0f+ZL1Q7CGHiKeTL22UfvrJzicsbZ7oEssWP1Opxx71zO17pEigNFfdNzVvfRkyXVdowO0Vh1zrPLoLYy6zbYiPRK5HZGegWoZ4DMRkUY5IfByWwJY45zC2EY4aD6ttRaUNabxGYBEAzCR6+ujFMOHz20D3j620dMnnmi1cHHFxcML+bqt1EQF8UCtVKwGUUaKxWoUpzfPzZetTqcHGxUoHQOwCS6eeBF2P/8NoDLw9W9PtWpc9g9ezs+V9px+aMCJTp0vrO6NtJ+bLW7fEgRXlxaiA0ZH3p9OAGy7169/msCe45mmHB+abtVY3HZfcrIUj/74aOCAmfn0IQW/zPgP7ISVqdXt+wGmjQAY3QJ+PPR4NQZqDXnt8L3t004YrQxsLtydcEaHC8mBradtWD6fnZj9fKXywpVHNnybCheXmubz14hHXn33xpa9/8retX5rj1/3XfpoPCLcB9eXzkwdheTnKlbbcj313Y6DcP37Jqm2RqR80yXoX26/ez7RhZkNglR+Er1YKBc/yajB+0vUr5UNqn5pJdZbHptsZmuYzOyGv0ZGm8sBODs/2CaGkdMXi4HyxdSkls7fmWXVM3G14rJ1XXBZVwmtBLSJh/b/AIevAjD15uLYsTHs6MNvtW/5pmAm53yZHbjctwO85f5hI14pVz+Z3eXJuWCo33h67kLrhmsgAHY19B9fcWp8DDN8zw0nENbOevjm72DaKhA1/49oTznn5/OeVnraKu15qmVoDRSA4w359ESqGoH/e+pmpxqrtDMowBnxBGMaDq5jPQ+MQTUsa7VTV0YcRE0XRS50wB23Olr9V6hb/0izxlym0+hJTI+TQvSp8Nz6Y1pXR+o90DwliD7acZgNvVHtfqCJE0Hr9zpP5ErXQCH8YOeDkugy/1N4fmie3Yr8C8CsNyZJB7jYAAAAAElFTkSuQmCC',w:81,h:24}};
+  let auto={src:{},anchor:null,hud:null},mesoOff=false,AFC={};
+  const isAuto=k=>auto.src[k]!=='manual';
+  const imgCanvas=src=>new Promise(res=>{const im=new Image();im.onload=()=>{const c=document.createElement('canvas');c.width=im.width;c.height=im.height;c.getContext('2d').drawImage(im,0,0);res(c);};im.onerror=()=>res(null);im.src=src;});
+  function grayFrom(src,sx,sy,sw,sh,dw,dh){dw=Math.max(1,Math.round(dw));dh=Math.max(1,Math.round(dh));
+    const c=document.createElement('canvas');c.width=dw;c.height=dh;const g=c.getContext('2d',{willReadFrequently:true});
+    g.imageSmoothingEnabled=true;g.imageSmoothingQuality='high';g.drawImage(src,sx,sy,sw,sh,0,0,dw,dh);
+    const d=g.getImageData(0,0,dw,dh).data,o=new Float32Array(dw*dh);for(let i=0;i<o.length;i++)o[i]=d[i*4]*0.299+d[i*4+1]*0.587+d[i*4+2]*0.114;return {g:o,w:dw,h:dh};}
+  // the best few places where T looks like F (scores −1…1), far enough apart to be different places
+  function ncc(F,T,keep=3){
+    const fw=F.w,fh=F.h,tw=T.w,th=T.h,n=tw*th;if(tw>fw||th>fh)return [];
+    let tm=0;for(const v of T.g)tm+=v;tm/=n;const Tc=new Float32Array(n);let ts=0;for(let i=0;i<n;i++){Tc[i]=T.g[i]-tm;ts+=Tc[i]*Tc[i];}ts=Math.sqrt(ts);if(ts<1)return [];
+    const W1=fw+1,I=new Float64Array(W1*(fh+1)),I2=new Float64Array(W1*(fh+1));
+    for(let y=0;y<fh;y++){let s=0,s2=0;for(let x=0;x<fw;x++){const v=F.g[y*fw+x];s+=v;s2+=v*v;I[(y+1)*W1+x+1]=I[y*W1+x+1]+s;I2[(y+1)*W1+x+1]=I2[y*W1+x+1]+s2;}}
+    const out=[];
+    for(let y=0;y<=fh-th;y++)for(let x=0;x<=fw-tw;x++){
+      const a=y*W1+x,b=a+tw,c=(y+th)*W1+x,d=c+tw,sum=I[d]-I[b]-I[c]+I[a],vs=(I2[d]-I2[b]-I2[c]+I2[a])-sum*sum/n;
+      if(vs<n*9)continue;                                                         // flat (std < 3): nothing to match there
+      let cr=0;for(let ty=0;ty<th;ty++){const fo=(y+ty)*fw+x,to=ty*tw;for(let tx=0;tx<tw;tx++)cr+=F.g[fo+tx]*Tc[to+tx];}
+      const s=cr/(Math.sqrt(vs)*ts);
+      if(out.length<keep||s>out[out.length-1].s){
+        const near=out.findIndex(o=>Math.abs(o.x-x)<tw/2&&Math.abs(o.y-y)<th/2);
+        if(near>=0){if(s>out[near].s)out[near]={s,x,y};}else out.push({s,x,y});
+        out.sort((p,q)=>q.s-p.s);if(out.length>keep)out.pop();}}
+    return out;}
+  // find picture `tpl` (a canvas) shown at tw×th frame pixels, inside `area` (frame px) — coarse ≈24 px wide, then fine ≈56 px
+  function findPicture(tpl,tw,th,area,min=0.6){
+    const W=video.videoWidth,H=video.videoHeight;if(!W||tw<6||th<3)return null;
+    const A=area?{x:Math.max(0,area.x),y:Math.max(0,area.y)}:{x:0,y:0};A.w=Math.min(W-A.x,area?area.w:W);A.h=Math.min(H-A.y,area?area.h:H);
+    if(A.w<tw||A.h<th)return null;
+    const d1=Math.max(1,tw/24),F=grayFrom(video,A.x,A.y,A.w,A.h,A.w/d1,A.h/d1),T1=grayFrom(tpl,0,0,tpl.width,tpl.height,tw/d1,th/d1);
+    let best=null;
+    for(const c of ncc(F,T1,3)){if(c.s<min-0.2)continue;
+      const d2=Math.max(1,tw/56),pad=d1*2,bx=Math.max(0,A.x+c.x*d1-pad),by=Math.max(0,A.y+c.y*d1-pad),bw=Math.min(W-bx,tw+pad*2),bh=Math.min(H-by,th+pad*2);
+      const f=ncc(grayFrom(video,bx,by,bw,bh,bw/d2,bh/d2),grayFrom(tpl,0,0,tpl.width,tpl.height,tw/d2,th/d2),1)[0];
+      if(f&&(!best||f.s>best.s))best={x:bx+f.x*d2,y:by+f.y*d2,s:f.s};}
+    return best&&best.s>=min?best:null;}
+  // the HP and MP fills on the bottom bar → the HUD's position and size
+  function findHud(){
+    const W=video.videoWidth,H=video.videoHeight;if(!W)return null;
+    const y0=Math.floor(H*0.72),h=H-y0,c=document.createElement('canvas');c.width=W;c.height=h;
+    const g=c.getContext('2d',{willReadFrequently:true});g.drawImage(video,0,y0,W,h,0,0,W,h);const d=g.getImageData(0,0,W,h).data;
+    const mn=Math.max(5,Math.round(W*0.004)),cand=[];
+    for(let y=0;y<h;y++){const R=[],B=[];let rs=-1,bs=-1;
+      for(let x=0;x<=W;x++){const i=(y*W+x)*4,r=x<W&&d[i]>150&&d[i+1]<95&&d[i+2]<95&&d[i]-d[i+1]>90,b=x<W&&d[i+2]>150&&d[i]<100&&d[i+2]-d[i]>80;
+        if(r&&rs<0)rs=x;if(!r&&rs>=0){if(x-rs>=mn)R.push([rs,x-1]);rs=-1;}
+        if(b&&bs<0)bs=x;if(!b&&bs>=0){if(x-bs>=mn)B.push([bs,x-1]);bs=-1;}}
+      for(const r of R)for(const b of B){const P=b[0]-r[0];
+        if(P<W*0.03||P>W*0.25||r[1]>=b[0]||r[1]-r[0]>P)continue;                 // the HP fill can't be longer than its gauge
+        if(B.some(o=>o[0]>r[0]&&o[0]<b[0]))continue;                              // the MP fill is the very next blue thing
+        let e=cand.find(o=>Math.abs(o.Rs-r[0])<=3&&Math.abs(o.Bs-b[0])<=3);if(!e)cand.push(e={Rs:r[0],Bs:b[0],ys:[]});e.ys.push(y0+y);}}
+    let best=null;for(const e of cand){const P=e.Bs-e.Rs;if(e.ys.length<3||e.ys.length>0.25*P)continue;   // gauges are thin; buttons are tall
+      if(!best||e.ys.length>best.ys.length)best=e;}
+    if(!best)return null;return {Rs:best.Rs,Bs:best.Bs,y:best.ys[best.ys.length>>1],P:best.Bs-best.Rs,W,H};}
+  const normBox=(x,y,w,h)=>{const W=video.videoWidth,H=video.videoHeight;x=Math.max(0,x);y=Math.max(0,y);w=Math.min(W-x,w);h=Math.min(H-y,h);
+    return w>4&&h>3?{x:x/W,y:y/H,w:w/W,h:h/H}:null;};
+  const hudBox=(hu,k)=>{const [a,b,c,e]=AF[k],P=hu.P;return normBox((k==='who'?hu.Rs:hu.Bs)+a*P,hu.y+b*P,c*P,e*P);};
+  const uiScale=hu=>hu?hu.P/AF.P:(auto.hud&&auto.hud.W===video.videoWidth?auto.hud.P/AF.P:video.videoWidth/1456);
+  function locateMap(hu){if(!AFC.map)return null;const s=uiScale(hu);
+    const p=findPicture(AFC.map,AF.tplMap.w*s,AF.tplMap.h*s,null,0.62);if(!p)return null;
+    const [a,b,c,e]=AF.map,P=AF.P*s;return normBox(p.x+a*P,p.y+b*P,c*P,e*P);}
+  // the learned picture next to the Meso box (exact pixels of this screen), scaled if the capture size changed
+  function anchorAt(){const a=auto.anchor;if(!a||!AFC.anchor)return null;const k=video.videoWidth/a.W;return {k,a};}
+  function locateMeso(hu){
+    const L=anchorAt();
+    if(L){const {k,a}=L,p=findPicture(AFC.anchor,a.w*k,a.h*k,null,0.7);if(p)return normBox(p.x+a.dx*k,p.y+a.dy*k,a.bw*k,a.bh*k);}
+    if(!AFC.meso)return null;const s0=uiScale(hu);let best=null;
+    for(const f of [0.6,0.75,0.9,1.05,1.25,1.5,1.8]){const s=s0*f,p=findPicture(AFC.meso,AF.tplMeso.w*s,AF.tplMeso.h*s,null,0.6);if(p&&(!best||p.s>best.p.s))best={p,s};}
+    if(!best)return null;const {p,s}=best,M=AF.meso;return normBox(p.x+M.dx*s,p.y+M.dy*s,M.w*s,M.h*s);}
+  // is the Meso field on screen right now? (the inventory can be closed or moved)
+  function mesoVisible(){const r=regions.meso;if(!r)return false;const W=video.videoWidth,H=video.videoHeight;
+    const L=anchorAt();
+    if(L){const {k,a}=L,bx=r.x*W-a.dx*k,by=r.y*H-a.dy*k,pad=Math.max(6,a.h*k);
+      return !!findPicture(AFC.anchor,a.w*k,a.h*k,{x:bx-pad,y:by-pad,w:a.w*k+pad*2,h:a.h*k+pad*2},0.62);}
+    const cr=grabCrop(r,false,1);if(!cr)return false;let mn=255,mx=0;for(const v of cr.L){if(v<mn)mn=v;if(v>mx)mx=v;}return mx-mn>=40;}
+  // after a good Meso read: remember the picture beside the box (the "MESOS" label / field edge) to find it again later
+  async function learnMesoAnchor(){const r=regions.meso;if(!r||!stream)return;const W=video.videoWidth,H=video.videoHeight;
+    const bx=r.x*W,by=r.y*H,bw=r.w*W,bh=r.h*H;
+    const tries=[[bx+bw,by-bh*0.4,Math.max(bh*3,bw*0.5),bh*1.8],[bx-Math.max(bh*3,bw*0.5),by-bh*0.4,Math.max(bh*3,bw*0.5),bh*1.8]];
+    for(const [x,y,w,h] of tries){if(x<0||y<0||x+w>W||y+h>H)continue;
+      const G=grayFrom(video,x,y,w,h,w,h);let m=0;for(const v of G.g)m+=v;m/=G.g.length;let v2=0;for(const v of G.g)v2+=(v-m)*(v-m);
+      if(Math.sqrt(v2/G.g.length)<12)continue;                                    // too plain to be found again
+      const c=document.createElement('canvas');c.width=Math.round(w);c.height=Math.round(h);c.getContext('2d').drawImage(video,x,y,w,h,0,0,c.width,c.height);
+      auto.anchor={url:c.toDataURL('image/png'),w:c.width,h:c.height,dx:bx-x,dy:by-y,bw,bh,W};AFC.anchor=c;await put('kv',auto,'ocrAuto');return true;}
+    return false;}
+  async function autoFind(force=false){
+    if(!stream||!video.videoWidth||isBlack())return null;const out={};
+    if(force){auto.src={};auto.anchor=null;AFC.anchor=null;}
+    const hu=findHud();
+    if(hu){auto.hud={P:hu.P,W:hu.W,H:hu.H};for(const k of ['who','exp'])if(isAuto(k)||!regions[k]){const b=hudBox(hu,k);if(b){regions[k]=b;auto.src[k]='auto';out[k]=true;}}}
+    if(isAuto('map')||!regions.map){const m=locateMap(hu);if(m){regions.map=m;auto.src.map='auto';out.map=true;}}
+    if(isAuto('meso')||!regions.meso){const m=locateMeso(hu);if(m){regions.meso=m;auto.src.meso='auto';out.meso=true;mesoOff=false;st.mesoHidden=null;}}
+    if(Object.keys(out).length){await put('kv',regions,'ocrRegions');await put('kv',{w:video.videoWidth,h:video.videoHeight},'ocrRegionsSize');st.q.relocate++;}
+    await put('kv',auto,'ocrAuto');drawBoxes();return out;}
+  const autoText=o=>{if(!o)return '';const y=k=>o[k]||regions[k]?'✓':'—';
+    return `🧭 หากรอบเอง: EXP ${y('exp')} · เลเวล/ชื่อ ${y('who')} · แมพ ${y('map')} · เงิน ${regions.meso?'✓':'— เปิดกระเป๋าในเกมแป๊บนึง ระบบจะเจอเอง'}`;};
+  // while the inventory is closed: look for the Meso field every few seconds; the moment it shows, read it
+  let seekTimer=null;
+  function seekStart(){seekStop();seekTimer=tickWin.setInterval(seekMeso,3000);}
+  function seekStop(){if(seekTimer){try{tickWin.clearInterval(seekTimer);}catch(e){}}seekTimer=null;}
+  async function seekMeso(){
+    if(busy||!stream||!timer||!video.videoWidth)return;if(regions.meso&&!mesoOff&&!st.mesoHidden)return;
+    busy=true;try{
+      if(regions.meso&&isAuto('meso')===false&&!auto.anchor){if(!mesoVisible())return;}                 // a hand-drawn box with nothing learned yet: wait for it
+      else{const m=(regions.meso&&mesoVisible())?regions.meso:locateMeso(auto.hud);if(!m)return;
+        if(m!==regions.meso){regions.meso=m;await put('kv',regions,'ocrRegions');drawBoxes();st.q.relocate++;}}
+      mesoOff=false;const t=Date.now(),w=await ensure(),r=await readRegion(w,'meso');const v=r?.best?.val??null;
+      st.mesoHidden=null;if(v!=null&&acceptMeso(v,t,!!r.byTpl||r.agree>=2)){st.errMeso=0;render();}
+    }catch(e){}finally{busy=false;}}
   /* ---- accept/reject + accumulate ----
      One misread must never poison the totals:
      • a number is only used after the median of its last 3 reads (one odd read is outvoted)
@@ -1538,6 +1662,23 @@ const OCR=(()=>{
      never a running sum of read-to-read steps — so a misread that comes and goes cannot inflate the totals. */
   const expTotal=()=>Math.max(0,st.expCarry+(st.exp-st.expBase));
   const mesoTotal=()=>Math.max(0,st.meso-st.mesoBase);
+  /* Meso while the inventory is closed: EXP is always on screen, so Meso ≈ (Meso per EXP) × EXP gained since the Meso was
+     last seen. Meso per EXP comes from this session's own reads, steadied by earlier sessions on the same map
+     (shrinkage: the earlier value counts as 2% of a level of EXP, so this session's data takes over quickly). */
+  let mesoPrior=null,mapNow=null,priorSavedT=0;
+  function mesoK(){const E=st.mesoSeenExp||0,M=st.mesoCollected||0,R=reqNow()||1e6,E0=R*0.02;
+    if(mesoPrior&&mesoPrior.k>=0)return (M+mesoPrior.k*E0)/(E+E0);
+    return E>=R*0.005?Math.max(0,M/E):null;}
+  function mesoExtra(now=Date.now()){if(st.exp==null)return 0;
+    const stale=!regions.meso||mesoOff||!!st.mesoHidden||st.meso==null||(st.lastMesoT&&now-st.lastMesoT>intervalMs()*2.5);if(!stale)return 0;
+    const k=mesoK();if(k==null)return 0;const E=expTotal()-(st.mesoSeenExp||0);return E>0?k*E:0;}
+  function mesoSeen(t,prev,exPrev=0){
+    const ex=st.mesoSeenExp!=null&&prev!=null?exPrev:0;                         // how good was the estimate while it was hidden?
+    if(ex>0)st.q.mesoEst.push({min:Math.round((t-st.lastMesoSeenT)/60000),est:Math.round(ex),actual:st.meso-prev});
+    st.mesoSeenExp=st.exp!=null?expTotal():0;st.lastMesoSeenT=t;
+    const R=reqNow()||1e6;if(mapNow&&st.mesoSeenExp>=R*0.02&&t-priorSavedT>120000){priorSavedT=t;
+      getKV('mesoPerExp').then(o=>{o=o||{};o[mapNow]={k:st.mesoCollected/st.mesoSeenExp,e:st.mesoSeenExp,t};return put('kv',o,'mesoPerExp');}).catch(()=>{});}}
+  async function setMap(id){mapNow=id||null;mesoPrior=null;if(!id)return;try{const o=await getKV('mesoPerExp');if(o&&o[id])mesoPrior=o[id];}catch(e){}}
   /* Farming clock. Time counts as farming unless the screen PROVED a pause: a clear read showing the same EXP
      15 s or more after the last gain. Reads that could not be read prove nothing, so their time still counts —
      otherwise a hard-to-read EXP box makes the clock too short and EXP/hr far too high. */
@@ -1577,21 +1718,37 @@ const OCR=(()=>{
         st.expBase+=val-st.exp;                                                   // a misread baseline: move it, never count the jump
         st.exp=val;st.pct=reqNow()?+(val/reqNow()*100).toFixed(2):pct;st.lastExpT=t;st.expGained=expTotal();st.expHist.push({t,c:st.expGained});});return false;}
     if(d>0)creditGain(t);else st.stillT=t;                                    // same EXP on a clear read = proof of a pause
+    shadow(d,dt,!!v.est);
     st.expRej.length=0;st.exp=e;st.expEst=!!v.est;st.pct=pct??st.pct;st.lastExpT=t;st.expGained=expTotal();st.expHist.push({t,c:st.expGained});
     return true;
   }
-  function acceptMeso(v,t){
-    if(v==null||!isFinite(v))return false;
+  /* Shadow analysis — runs beside the tracker, changes nothing, is kept with the session so methods can be compared on real
+     farming: a Hampel test (median ± 3·1.4826·MAD of recent EXP/s) counts steps it would call outliers, and a 2-state
+     Kalman filter (EXP, EXP/s) on the farming clock gives its own EXP/hr, weighting % estimates as noisier than exact numbers. */
+  function shadow(d,dt,est){const q=st.q;q.expSteps++;
+    if(d>0){const r=d/dt;st.hamp.push(r);if(st.hamp.length>20)st.hamp.shift();
+      if(st.hamp.length>=6){const m=med(st.hamp),mad=med(st.hamp.map(x=>Math.abs(x-m)));if(Math.abs(r-m)>3*1.4826*mad+1)q.hampelFlags++;}}
+    const z=expTotal(),tt=st.activeMs/1000,Rm=est?Math.pow((reqNow()||1e6)*5e-5,2):4;
+    if(!st.kf){st.kf={x:z,v:0,P:[[Rm,0],[0,1e4]],t:tt};return;}
+    const k=st.kf,h=Math.max(0,tt-k.t);k.t=tt;
+    if(h>0){k.x+=k.v*h;const P=k.P;k.P=[[P[0][0]+h*(P[1][0]+P[0][1])+h*h*P[1][1],P[0][1]+h*P[1][1]],[P[1][0]+h*P[1][1],P[1][1]+25*h]];}
+    const y=z-k.x,S=k.P[0][0]+Rm,K0=k.P[0][0]/S,K1=k.P[1][0]/S;k.x+=K0*y;k.v+=K1*y;
+    const P=k.P;k.P=[[(1-K0)*P[0][0],(1-K0)*P[0][1]],[P[1][0]-K1*P[0][0],P[1][1]-K1*P[0][1]]];q.kalmanHr=Math.round(k.v*3600);}
+  function acceptMeso(v,t,sure=false){
+    if(v==null||!isFinite(v))return false;const exPrev=mesoExtra(t);
+    // back after the inventory was closed: the old reads in the median window are stale. A sure read (digit templates or
+    // several variants agree) is taken at once — opening the inventory for a second is enough; otherwise wait for agreement.
+    if(st.meso!=null&&st.lastMesoT&&t-st.lastMesoT>intervalMs()*2.5){if(sure)st.mesoWin=[v,v];else{st.mesoWin=[v];return false;}}
     if(String(v).length<3&&!(st.meso!=null&&Math.abs(v-st.meso)<1000))return false;   // "1", "41" … = a stray mark
     const m=smooth(st.mesoWin,v);if(m==null)return false;
-    if(st.meso==null){st.meso=st.mesoBase=m;st.t0=st.t0||t;st.lastMesoT=t;st.mesoHist.push({t,c:0});return true;}
+    if(st.meso==null){st.meso=st.mesoBase=m;st.t0=st.t0||t;st.lastMesoT=t;st.mesoHist.push({t,c:0});mesoSeen(t,null);return true;}
     const d=m-st.meso,dt=Math.max(1,(t-(st.lastMesoT||t))/1000);
     const cap=Math.max(3000,400*dt,st.meso*0.004);                                   // pick-ups are small; bigger jumps need 3 matching reads
     if(d<0||d>cap){rebaseIfStuck(st.mesoRej,m,t,Math.max(2000,m*0.005),val=>{
         // a lasting change that is not farming (bought potions, sold items, or the start value was misread):
         // move the starting point with it so it is not counted as Meso earned
         st.mesoBase+=val-st.meso;st.meso=val;st.lastMesoT=t;st.mesoCollected=mesoTotal();st.mesoHist.push({t,c:st.mesoCollected});});return false;}
-    st.mesoRej.length=0;st.meso=m;st.lastMesoT=t;st.mesoCollected=mesoTotal();st.mesoHist.push({t,c:st.mesoCollected});return true;
+    const prev=st.meso;st.mesoRej.length=0;st.meso=m;st.lastMesoT=t;st.mesoCollected=mesoTotal();st.mesoHist.push({t,c:st.mesoCollected});mesoSeen(t,prev,exPrev);return true;
   }
   // start from the values the player confirmed (start of the adventure) — the reader then only has to follow changes
   function seed(v,t=Date.now()){
@@ -1608,7 +1765,7 @@ const OCR=(()=>{
   const expIdle=()=>quietSince()!=null;
   const expRate=()=>st.activeMs>=20000?st.expGained/(st.activeMs/3.6e6):null;
   // Meso/hr on the same farming clock when EXP is being read; otherwise real time
-  const mesoRate=()=>regions.exp&&st.activeMs>=20000?st.mesoCollected/(st.activeMs/3.6e6):perHr(st.mesoCollected,st.t0);
+  const mesoRate=()=>{const M=st.mesoCollected+mesoExtra();return regions.exp&&st.activeMs>=20000?M/(st.activeMs/3.6e6):perHr(M,st.t0);};
   function isBlack(){const c=document.createElement('canvas');c.width=48;c.height=27;const g=c.getContext('2d',{willReadFrequently:true});
     g.drawImage(video,0,0,48,27);const d=g.getImageData(0,0,48,27).data;let mx=0;for(let i=0;i<d.length;i+=4)mx=Math.max(mx,d[i],d[i+1],d[i+2]);return mx<24;}
   const shot=(cv,h)=>{if(!cv)return null;const c=document.createElement('canvas');const k=h/cv.height;c.width=Math.max(1,Math.round(cv.width*k));c.height=h;
@@ -1620,7 +1777,7 @@ const OCR=(()=>{
     if(!stream||!video.videoWidth)return out;
     out.black=isBlack();if(out.black)return out;
     const w=await ensure();
-    for(const k of ['exp','meso']){if(!regions[k])continue;const r=await readRegion(w,k);if(!r)continue;const K=k==='exp'?'Exp':'Meso';
+    for(const k of ['exp','meso']){if(!regions[k]||(k==='meso'&&mesoOff))continue;const r=await readRegion(w,k);if(!r)continue;const K=k==='exp'?'Exp':'Meso';
       out[k]=r.best?.val??null;out['all'+K]=r.all;out['raw'+K]=r.best?.text||'';out['img'+K]=shot(r.raw,36);out['bin'+K]=r.best?shot(r.best.v.canvas,30):null;
       if(k==='exp'&&out.exp){
         if(out.exp.est){out.expSure=true;out.rawExp+=` → ≈${out.exp.exp} (คิดจาก % × ตาราง EXP — เกมไม่โชว์ตัวเลขเมื่อเกินล้าน)`;}
@@ -1641,17 +1798,25 @@ const OCR=(()=>{
   async function readOnce(){
     if(busy||!stream||(!regions.exp&&!regions.meso))return;busy=true;
     try{
-      const t=Date.now(),r=await readNow(st.level??levelHint);st.black=r.black;
       st.cycle=(st.cycle||0)+1;
+      // the Meso field is only on screen while the inventory is open: closed = wait (not an error), keep the last value
+      if(regions.meso&&!isBlack()){if(mesoVisible()){mesoOff=false;st.mesoHidden=null;}else{mesoOff=true;st.mesoHidden=st.mesoHidden||Date.now();}}
+      // the HUD box drifted (window resized/moved): find the HP/MP gauges again
+      if(st.errExp>=2&&isAuto('exp')&&st.cycle%3===0){const hu=findHud();if(hu){auto.hud={P:hu.P,W:hu.W,H:hu.H};for(const k of ['who','exp']){const b=hudBox(hu,k);if(b)regions[k]=b;}st.q.relocate++;put('kv',regions,'ocrRegions');drawBoxes();}}
+      const t=Date.now(),r=await readNow(st.level??levelHint);st.black=r.black;
       if(regions.who&&!r.black&&(st.cycle%4===1)){try{const who=await readWho(typeof characters!=='undefined'?characters:[]);
         if(who?.level&&(st.level==null||(who.level>=st.level&&who.level<=st.level+1))&&who.level!==st.level)setLevel(who.level,'who');}catch(e){}}
-      const okE=regions.exp&&!r.black&&acceptExp(r.exp,t),okM=regions.meso&&!r.black&&acceptMeso(r.meso,t);
+      const okE=regions.exp&&!r.black&&acceptExp(r.exp,t),okM=regions.meso&&!mesoOff&&!r.black&&acceptMeso(r.meso,t,!!r.mesoSure||/แม่แบบ/.test(r.rawMeso));
+      {const q=st.q;q.reads++;                                                     // read quality — kept with the session, not shown
+        if(regions.exp&&!r.black){if(r.exp?.est)q.expEst++;if(/แม่แบบ/.test(r.rawExp))q.expTpl++;okE?q.expOk++:(r.exp?q.expRej++:q.expNone++);}
+        if(regions.meso&&!r.black){if(mesoOff)q.mesoHiddenReads++;else{if(/แม่แบบ/.test(r.rawMeso))q.mesoTpl++;okM?q.mesoOk++:(r.meso!=null?q.mesoRej++:q.mesoNone++);}}}
+      if(okM&&!auto.anchor)learnMesoAnchor();
       if(okM&&r.listMeso&&r.meso===st.meso&&st.mesoWin.length>=3&&st.mesoWin.every(x=>x===r.meso)){const dm=String(r.meso);   // 3 identical accepted reads
         for(const v of r.listMeso){const g=alignGlyphs(v.gAll,dm.length);if(g)tplLearn('meso',g,dm);}}
       if(regions.exp){if(okE)st.errExp=0;else st.errExp++;st.rawExp=r.rawExp;}
-      if(regions.meso){if(okM)st.errMeso=0;else st.errMeso++;st.rawMeso=r.rawMeso;}
+      if(regions.meso&&!mesoOff){if(okM)st.errMeso=0;else st.errMeso++;st.rawMeso=r.rawMeso;}
       const stat=(ok,val,base)=>ok?'ok':(val!=null&&!r.black&&(base==null||(val===r.exp?st.expRej.length:st.mesoRej.length))?'wait':'no');
-      st.log.push({t,r,okE:stat(okE,r.exp,st.exp),okM:stat(okM,r.meso,st.meso)});if(st.log.length>6)st.log.shift();
+      st.log.push({t,r,okE:stat(okE,r.exp,st.exp),okM:stat(okM,r.meso,st.meso),hid:mesoOff});if(st.log.length>6)st.log.shift();
       renderLog();render();autofill();
       if(r.black)$('ocrHint').innerHTML='⚠️ <b>ภาพที่แชร์เป็นจอดำ</b> — เกมที่เปิดเต็มจอจริงมักจับภาพไม่ได้ ลองเปลี่ยนเกมเป็นโหมดหน้าต่าง หรือเต็มจอแบบไม่มีขอบ (borderless) แล้วแชร์ใหม่';
       else if(st.errExp>=3||st.errMeso>=3)$('ocrHint').innerHTML='⚠️ อ่านไม่ได้หลายครั้ง — ดูภาพหลักฐานด้านล่าง ถ้าไม่เห็นตัวเลขชัด ๆ ลอง <b>ตั้งกรอบใหม่ให้แคบเฉพาะตัวเลข</b>';
@@ -1664,7 +1829,7 @@ const OCR=(()=>{
     const cell=(lbl,img,bin,val,ok,has)=>!has?'':`<span class="lg ${ok}"><b>${lbl}</b>${img?`<img alt="" src="${img}" title="ภาพจากจอ">`:''}${bin?`<span class="arr">→</span><img class="bin" alt="" src="${bin}" title="ภาพที่ใช้อ่าน">`:''}<span class="v">${val}</span>${ok==='ok'?'✓':ok==='wait'?'<span class="small">รอยืนยันอีกครั้ง</span>':'✗'}</span>`;
     box.innerHTML=`<div class="muted small" style="width:100%">🔎 ภาพหลักฐานการอ่านล่าสุด — ตัวเลขควรตรงกับภาพ ถ้าไม่ตรงลองตั้งกรอบใหม่ให้แคบเฉพาะตัวเลข</div>`+
       st.log.slice().reverse().map(e=>{const r=e.r;return `<div class="ocrlog"><span class="t">${hms(e.t)}</span>`+(r.black?'<span class="lg no">⚠️ ภาพจอดำ</span>':
-        cell('EXP',r.imgExp,r.binExp,r.exp?(r.exp.est?'≈':'')+fmt(r.exp.exp)+(r.exp.pct!=null?` (${r.exp.pct}%)`:''):'อ่านไม่ได้',e.okE,!!regions.exp)+cell('Meso',r.imgMeso,r.binMeso,r.meso!=null?fmt(r.meso):'อ่านไม่ได้',e.okM,!!regions.meso))+'</div>';}).join('');
+        cell('EXP',r.imgExp,r.binExp,r.exp?(r.exp.est?'≈':'')+fmt(r.exp.exp)+(r.exp.pct!=null?` (${r.exp.pct}%)`:''):'อ่านไม่ได้',e.okE,!!regions.exp)+cell('Meso',r.imgMeso,r.binMeso,r.meso!=null?fmt(r.meso):(e.hid?'กระเป๋าปิด':'อ่านไม่ได้'),e.hid?'wait':e.okM,!!regions.meso))+'</div>';}).join('');
   }
   function render(){
     const eMin=perMin(st.expHist),eHr=expRate(),mMin=perMin(st.mesoHist),mHr=mesoRate();
@@ -1674,7 +1839,9 @@ const OCR=(()=>{
       stat('EXP ตอนนี้',`${st.expEst?'≈':''}${fmt(st.exp)}${st.pct!=null?` <span class="sub">${st.pct}%</span>`:''}${warn(st.errExp)}`)+
       stat('EXP/นาที',fmtK(eMin))+stat('EXP/ชม. (เฉพาะเวลาที่ได้ EXP)',fmtK(rate)+(timer&&expIdle()?' <span class="sub warn">⏸ หยุดนับ</span>':''))+
       stat('อัปเลเวลในอีก',left&&rate?dur(left/rate*3.6e6):'–')+
-      stat('Meso ตอนนี้',fmt(st.meso)+warn(st.errMeso))+stat('Meso เก็บได้',fmt(st.mesoCollected))+
+      (()=>{const ex=mesoExtra(),ago=st.lastMesoT?Math.round((Date.now()-st.lastMesoT)/60000):null,
+        note=ex>0||mesoOff?` <span class="sub">${mesoOff||st.mesoHidden?'กระเป๋าปิด':'ยังไม่เห็นเงิน'}${ago!=null?` · เห็นล่าสุด ${ago} นาทีก่อน`:''}</span>`:'';
+        return stat('Meso ตอนนี้',(st.meso!=null?(ex>0?'≈':'')+fmt(Math.round(st.meso+ex)):'–')+note+warn(st.errMeso))+stat('Meso เก็บได้',(ex>0?'≈':'')+fmt(Math.round(st.mesoCollected+ex)));})()+
       stat('Meso/นาที',fmtK(mMin))+stat('Meso/ชม. (เฉพาะเวลาฟาร์ม)',fmtK(mHr||(mMin?mMin*60:null)));
     if(typeof PIP!=='undefined')PIP.update();
   }
@@ -1685,23 +1852,30 @@ const OCR=(()=>{
     const exp=fresh(st.lastExpT)?st.exp:null,pct=fresh(st.lastExpT)?st.pct:null,meso=fresh(st.lastMesoT)?st.meso:null;
     const lvl=st.level;
     if(!active){fill('s_exp',exp);fill('s_pct',pct);fill('s_mesos',meso);fill('s_level',lvl);}
-    else{fill('c_exp',exp);fill('c_pct',pct);fill('e_exp',exp);fill('e_pct',pct);fill('e_mesos',meso);fill('c_level',lvl);fill('e_level',lvl);}
+    else{fill('c_exp',exp);fill('c_pct',pct);fill('e_exp',exp);fill('e_pct',pct);fill('e_mesos',meso);fill('c_level',lvl);fill('e_level',lvl);
+      const em=$('e_mesos');if(em){const ex=mesoExtra();em.placeholder=meso==null&&(st.meso!=null||ex>0)?`เปิดกระเป๋าในเกมแป๊บนึง หรือพิมพ์เอง${ex>0&&st.meso!=null?` (ประมาณ ≈${fmt(Math.round(st.meso+ex))})`:''}`:'';}}
   }
   function live(){
     const eMin=perMin(st.expHist),eHr=expRate(),mMin=perMin(st.mesoHist),mHr=mesoRate();
     const req=reqNow()||(st.pct>0?st.exp/(st.pct/100):null),rate=eHr,left=req?req-st.exp:null;
     return {on:!!timer,exp:st.exp,pct:st.pct,expHr:rate,pctHr:req&&rate?rate/req*100:null,eta:left!=null&&rate?left/rate*3.6e6:null,
-      mesoHr:mHr||(mMin?mMin*60:null),t0:st.t0,idle:!!timer&&expIdle(),activeMs:st.activeMs,errExp:st.errExp,errMeso:st.errMeso,hasExp:!!regions.exp,hasMeso:!!regions.meso,black:!!st.black};
+      mesoHr:mHr||(mMin?mMin*60:null),t0:st.t0,idle:!!timer&&expIdle(),activeMs:st.activeMs,errExp:st.errExp,errMeso:st.errMeso,hasExp:!!regions.exp,hasMeso:!!regions.meso||mesoExtra()>0,mesoEst:mesoExtra()>0,black:!!st.black};
   }
   // the reader runs on a timer owned by a *visible* window: the floating window when it is open, so a hidden tab is not throttled
   let tickWin=window;
   const intervalMs=()=>{const v=+($('ocrInt')?.value||15);return (v>=15?v:15)*1000;};
   // two quick reads first, so the baseline (needs two matching reads) is ready in seconds, not minutes
-  function start(){stop();readOnce();tickWin.setTimeout(readOnce,2500);timer=tickWin.setInterval(readOnce,intervalMs());}
-  function stop(){if(timer){try{tickWin.clearInterval(timer);}catch(e){}}timer=null;}
+  function start(){stop();readOnce();tickWin.setTimeout(readOnce,2500);timer=tickWin.setInterval(readOnce,intervalMs());seekStart();}
+  function stop(){if(timer){try{tickWin.clearInterval(timer);}catch(e){}}timer=null;seekStop();}
   function setTicker(w){const was=!!timer;stop();tickWin=w||window;if(was)start();}
   async function init(){
     regions=Object.assign({exp:null,meso:null,who:null,map:null},await getKV('ocrRegions')||{});
+    auto=Object.assign({src:{},anchor:null,hud:null},await getKV('ocrAuto')||{});
+    if(!(await getKV('ocrAuto'))&&Object.values(regions).some(Boolean))for(const k in regions)if(regions[k])auto.src[k]='manual';   // boxes from before auto-find: keep them
+    [AFC.map,AFC.meso,AFC.anchor]=await Promise.all([imgCanvas(AF.tplMap.src),imgCanvas(AF.tplMeso.src),auto.anchor?imgCanvas(auto.anchor.url):null]);
+    if($('ocrAuto'))$('ocrAuto').onclick=async()=>{if(!stream){alert('เริ่มแชร์หน้าจอเกมก่อนนะคะ');return;}const o=await autoFind(true);
+      $('ocrHint').textContent=o&&Object.keys(o).length?autoText(o):'🧭 ยังหาแถบ HP/MP ด้านล่างไม่เจอ — ให้เห็นหน้าต่างเกมทั้งหมด หรือตั้งกรอบเองได้';
+      if(o&&Object.keys(o).length){document.dispatchEvent(new CustomEvent('lb-regions',{detail:'auto'}));if(!$('ocrOn').checked&&(regions.exp||regions.meso)){$('ocrOn').checked=true;start();}}};
     bindOverlay();
     try{const v=localStorage.getItem('logbook-ocr-int');if(v==='15'||v==='30')$('ocrInt').value=v;}catch(e){}   // the old 5 s option is gone
     $('ocrInt').onchange=e=>{try{localStorage.setItem('logbook-ocr-int',e.target.value);}catch(_){}if(timer)start();};
@@ -1733,7 +1907,7 @@ const OCR=(()=>{
   }
   function restart(){const was=!!timer;reset(true);   // ↺ keeps the level: the EXP table check needs it from the first read
 renderLog();render();$('ocrHint').textContent='↺ เริ่มนับใหม่แล้ว — ตัวเลขจะขึ้นอีกครั้งในไม่กี่วินาที';if(was)start();else if(stream)readOnce();}
-  return {init,live,setTicker,readNow,seed,restart,rememberMap,checkBoxes,learnMeso:async v=>{if(!stream||!regions.meso||v==null)return;const r=await readNow();if(!r.listMeso)return;const dm=String(v);for(const x of r.listMeso){const g=alignGlyphs(x.gAll,dm.length);if(g)await tplLearn('meso',g,dm);}},_tpl:()=>TPL,_tplLearn:tplLearn,_levelCanvases:()=>levelCanvases(regions.who).map(c=>c.toDataURL()),_fromPct:v=>fromPct(v),_titlePrint:titlePrint,_printSim:printSim,_variants:k=>{const V=variants(regions[k]);return V?V.list.map(v=>({tag:v.tag,count:v.count,modeH:v.modeH,img:v.canvas.toDataURL()})):null;},hasRegions:()=>!!(regions.exp||regions.meso),hasAny:()=>Object.values(regions).some(Boolean),has:k=>!!regions[k],readWho,readMap,_readNow:readNow,reset:()=>{reset();render();},snapshot:()=>({expGained:st.expGained,mesoCollected:st.mesoCollected,t0:st.t0}),stop,drawBoxes,_parseExp:parseExp,_parseMeso:parseMeso,_st:st,_accExp:acceptExp,_reqNow:reqNow,_accMeso:acceptMeso,_repairExp:v=>repairExp(v),_fitLevels:fitLevels,_setHint:h=>{levelHint=h;}};
+  return {init,live,setTicker,readNow,seed,restart,rememberMap,checkBoxes,learnMeso:async v=>{if(!stream||!regions.meso||v==null)return;const r=await readNow();if(!r.listMeso)return;const dm=String(v);for(const x of r.listMeso){const g=alignGlyphs(x.gAll,dm.length);if(g)await tplLearn('meso',g,dm);}},_tpl:()=>TPL,_tplLearn:tplLearn,_levelCanvases:()=>levelCanvases(regions.who).map(c=>c.toDataURL()),_fromPct:v=>fromPct(v),_titlePrint:titlePrint,_printSim:printSim,_variants:k=>{const V=variants(regions[k]);return V?V.list.map(v=>({tag:v.tag,count:v.count,modeH:v.modeH,img:v.canvas.toDataURL()})):null;},hasRegions:()=>!!(regions.exp||regions.meso),hasAny:()=>Object.values(regions).some(Boolean),has:k=>!!regions[k],readWho,readMap,_readNow:readNow,reset:()=>{reset();render();},snapshot:()=>({expGained:st.expGained,mesoCollected:st.mesoCollected,t0:st.t0,quality:{...st.q,mesoEst:st.q.mesoEst.slice(-20),rateHr:Math.round(expRate()||0),mesoExtra:Math.round(mesoExtra()),auto:{...auto.src}}}),autoFind,autoText,setMap,_findHud:findHud,_locateMeso:()=>locateMeso(auto.hud),_mesoVisible:mesoVisible,_auto:()=>auto,_mesoExtra:mesoExtra,_seek:seekMeso,_learnAnchor:learnMesoAnchor,_mesoOff:()=>mesoOff,_setMesoOff:v=>{mesoOff=!!v;st.mesoHidden=v?Date.now():null;},_setRegion:(k,v)=>{regions[k]=v;},_live:()=>live(),_render:()=>render(),stop,drawBoxes,_parseExp:parseExp,_parseMeso:parseMeso,_st:st,_accExp:acceptExp,_reqNow:reqNow,_accMeso:acceptMeso,_repairExp:v=>repairExp(v),_fitLevels:fitLevels,_setHint:h=>{levelHint=h;}};
 })();
 
 // two taps within 3 s → start counting again from what is on screen now (regions are kept)
@@ -1815,19 +1989,19 @@ body.compact{padding:4px 8px;justify-content:center}body.compact .hd,body.compac
       cell('exp','EXP/ชม.',fmtK(L.expHr),note(L,'exp'))+
       cell('','%/ชม.',L.pctHr!=null?L.pctHr.toFixed(2)+'%':'–',L.pct!=null?`ตอนนี้ ${L.pct}%`:'')+
       cell('eta','อัปเลเวลในอีก',L.eta!=null?eta(L.eta):'–')+
-      cell('meso','Meso/ชม.',L.hasMeso?fmtK(L.mesoHr):'–',note(L,'meso'));
+      cell('meso','Meso/ชม.',L.hasMeso?(L.mesoEst?'≈':'')+fmtK(L.mesoHr):'–',note(L,'meso'));
     const from=active?.startTime||L.t0;
     ft.innerHTML=`<span><span class="dot ${L.on?'on':''}"></span>${L.on?'กำลังอ่านจอ':'ยังไม่ได้เปิดอ่าน'}</span><span>⏱ ${active?'ฟาร์มไป':'อ่านมา'} <span class="clock">${from?hms(Date.now()-from):'0:00:00'}</span></span>`;
     const sep='<span class="sep">·</span>',warn=L.errExp>=3||L.errMeso>=3?' <span class="warn">⚠</span>':'';
     d.getElementById('bar').innerHTML=`<img alt="" src="${LOGO_IMG.book}"><span class="dot ${L.on?'on':''}"></span>`+
       `<span>EXP <span class="v e">${fmtK(L.expHr)}</span>/ชม.</span>${sep}<span><span class="v">${L.pctHr!=null?L.pctHr.toFixed(2)+'%':'–'}</span>/ชม.</span>${sep}`+
-      `<span>อัปอีก <span class="v t">${L.eta!=null?eta(L.eta):'–'}</span></span>`+(L.hasMeso?`${sep}<span>Meso <span class="v m">${fmtK(L.mesoHr)}</span>/ชม.</span>`:'')+
+      `<span>อัปอีก <span class="v t">${L.eta!=null?eta(L.eta):'–'}</span></span>`+(L.hasMeso?`${sep}<span>Meso <span class="v m">${L.mesoEst?'≈':''}${fmtK(L.mesoHr)}</span>/ชม.</span>`:'')+
       `${sep}<span>⏱ <span class="clock">${from?hms(Date.now()-from):'0:00:00'}</span></span>${warn}`;
   }
   // shared by the desktop overlay (LogBook Desktop) so both show exactly the same numbers
   function snapshot(){const L=OCR.live(),from=active?.startTime||L.t0;
     return {on:L.on,expHr:fmtK(L.expHr),pctHr:L.pctHr!=null?L.pctHr.toFixed(2)+'%':'–',pct:L.pct,eta:L.eta!=null?eta(L.eta):'–',
-      mesoHr:L.hasMeso?fmtK(L.mesoHr):null,clock:from?hms(Date.now()-from):'0:00:00',farming:!!active,warn:L.black||L.errExp>=3||L.errMeso>=3,expNote:noteText(L,'exp'),mesoNote:noteText(L,'meso')};}
+      mesoHr:L.hasMeso?(L.mesoEst?'≈':'')+fmtK(L.mesoHr):null,clock:from?hms(Date.now()-from):'0:00:00',farming:!!active,warn:L.black||L.errExp>=3||L.errMeso>=3,expNote:noteText(L,'exp'),mesoNote:noteText(L,'meso')};}
   return {open,update,isOpen,setMode,getMode:()=>mode,snapshot};
 })();
 /* ===================== map picker (start form) ===================== */
@@ -1925,7 +2099,8 @@ async function startSession(){
   if(!mapId){alert('เลือกแมพก่อนนะคะ');return;}
   if(mapId==='__new'){const n=$('s_newMapName').value.trim();if(!n){alert('ใส่ชื่อแมพใหม่ก่อนนะคะ');return;}
     mapId=(await addCustomMap(n,$('s_newMapArea').value,$('s_newMapId').value.trim())).id;}
-  try{await OCR.rememberMap(mapId);}catch(e){}            // the player confirmed this map: remember how its title looks
+  try{await OCR.rememberMap(mapId);}catch(e){}
+  try{await OCR.setMap(mapId);}catch(e){}            // the player confirmed this map: remember how its title looks
   try{const mz=num($('s_mesos').value);if(mz!=null)await OCR.learnMeso(mz);}catch(e){}   // …and the Meso digits, from the value the player confirmed
   const st={level:num($('s_level').value),exp:num($('s_exp').value),pct:num($('s_pct').value),mesos:num($('s_mesos').value)};
   if(st.exp==null)st.exp=expAt(st);                                 // above 1M only the % shows: table × %
