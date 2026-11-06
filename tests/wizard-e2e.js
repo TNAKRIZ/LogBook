@@ -27,7 +27,7 @@ const {chromium}=require('playwright');const fs=require('fs');
   await p.screenshot({path:S+'/w6.png'});
   await p.click('#sw_next');console.log('step:',await step());
   await p.click('#pipModes label:has(input[value=compact])');
-  await p.screenshot({path:S+'/w7.png'});await p.click('#glassGuide summary');await p.screenshot({path:S+'/w7b.png',fullPage:true});
+  await p.screenshot({path:S+'/w7.png'});
   await p.click('#sw_next');console.log('step:',await step());
   await p.screenshot({path:S+'/w8.png'});
   // jump back via stepper then forward via stepper

@@ -78,9 +78,6 @@ header{padding:14px 16px 12px;display:flex;flex-direction:column;gap:10px;align-
 .modepick{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:8px}
 .modepick label{display:flex;flex-direction:column;gap:2px;border:2px solid var(--line);border-radius:10px;padding:10px 12px;cursor:pointer;background:var(--bg);color:var(--ink);font-size:14px;margin:0}
 .modepick input{display:none}.modepick label:has(input:checked){border-color:var(--accent);background:var(--accent-soft)}
-details.glass{margin-top:14px;border:2px solid var(--line);border-radius:10px;padding:8px 12px;background:var(--bg)}
-details.glass summary{cursor:pointer;font-weight:700}
-details.glass h4{margin:12px 0 4px}details.glass ol{margin:4px 0;padding-left:20px}details.glass li{margin:3px 0}
 kbd{border:1px solid var(--line);border-bottom-width:3px;border-radius:5px;padding:0 5px;font:700 12px ui-monospace,monospace;background:var(--card)}
 .review{display:grid;gap:8px}
 .rv{display:flex;align-items:center;gap:12px;border:1px solid var(--line);border-radius:10px;padding:8px 12px;background:var(--bg)}
@@ -393,10 +390,6 @@ footer a{color:inherit}
         <label class="row small" style="margin:10px 0 0;color:var(--ink)"><input type="checkbox" id="pipAuto"> เปิดหน้าต่างลอยให้เองตอนกดเริ่มการผจญภัย</label>
         <div class="row" style="margin-top:10px"><button type="button" class="btn ghost sm" id="pipTry">🪟 ลองเปิดดูตอนนี้</button></div>
         <p class="muted small" id="pipHint" style="margin:8px 0 0">ใช้ได้ใน Chrome / Edge · ถ้าเล่นเกมแบบเต็มจอจริง หน้าต่างจะโดนเกมบัง ให้ตั้งเกมเป็นโหมดหน้าต่าง หรือเต็มจอแบบไม่มีขอบ (borderless)</p>
-        <details class="glass" id="glassGuide">
-          <summary>✨ อยากให้หน้าต่างลอยโปร่งแสง มองทะลุเห็นเกม</summary>
-          <div id="glassBody"></div>
-        </details>
       </div>
 
       <div class="wstep" data-k="review">
@@ -1939,10 +1932,7 @@ body{font:14px/1.3 "Noto Sans Thai","Leelawadee UI",Tahoma,system-ui,sans-serif;
 body.compact{padding:4px 8px;justify-content:center}body.compact .hd,body.compact .g,body.compact .ft{display:none}body.compact .bar{display:flex}`;
   const hms=ms=>{const t=Math.max(0,Math.floor(ms/1000)),h=Math.floor(t/3600),m=Math.floor(t%3600/60),s=t%60;return `${h}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;};
   const eta=ms=>{const m=Math.ceil(ms/60000);return m<60?`${m} นาที`:`${Math.floor(m/60)}ชม. ${m%60}น.`;};
-  // LogBook Desktop: a real see-through overlay window instead of Picture-in-Picture
-  const D=window.lbDesktop;let desk=false,deskTick=null;
-  if(D){D.onReset?.(()=>OCR.restart());D.onOverlayClosed(()=>{desk=false;clearInterval(deskTick);deskTick=null;setBtn();});D.onModeChanged(m=>{mode=m;try{localStorage.setItem('logbook-pip-mode',m);}catch(e){}});}
-  const isOpen=()=>desk||!!(w&&!w.closed);
+  const isOpen=()=>!!(w&&!w.closed);
   // short, actionable status for each number
   function noteText(L,k){const has=k==='exp'?L.hasExp:L.hasMeso,err=k==='exp'?L.errExp:L.errMeso;
     if(!has)return k==='exp'?'ยังไม่ได้ตั้งกรอบ EXP':'ยังไม่ได้ตั้งกรอบ Meso';if(L.black)return '⚠ ภาพจอดำ — ใช้ borderless';
@@ -1954,12 +1944,9 @@ body.compact{padding:4px 8px;justify-content:center}body.compact .hd,body.compac
   const SIZE={full:[320,270],compact:[680,52]};
   let mode=(()=>{try{return localStorage.getItem('logbook-pip-mode')||'full';}catch(e){return 'full';}})();
   function setMode(m){mode=m==='compact'?'compact':'full';try{localStorage.setItem('logbook-pip-mode',mode);}catch(e){}
-    if(D&&desk){D.setMode(mode);return;}
     if(isOpen()){const d=w.document;d.body.classList.toggle('compact',mode==='compact');const t=d.getElementById('tg');if(t)t.textContent=mode==='compact'?'▣ เต็ม':'▬ แถบ';update();}}
   async function open(m){
     if(m)setMode(m);
-    if(D){if(desk){D.closeOverlay();return;}desk=true;D.openOverlay({mode,logos:{book:LOGO_IMG.book,word:LOGO_IMG.word}});
-      clearInterval(deskTick);deskTick=setInterval(()=>D.pushStats(snapshot()),1000);D.pushStats(snapshot());setBtn();return;}
     if(isOpen()){w.close();return;}
     try{
       const [W,H]=SIZE[mode];
@@ -1981,7 +1968,6 @@ body.compact{padding:4px 8px;justify-content:center}body.compact .hd,body.compac
     setBtn();update();
   }
   function update(){
-    if(D&&desk){D.pushStats(snapshot());return;}
     if(!isOpen())return;const d=w.document,g=d.getElementById('g'),ft=d.getElementById('ft');if(!g)return;
     const L=OCR.live();
     const cell=(cls,k,v,sub)=>`<div class="c ${cls}"><span>${k}</span><b>${v}</b>${sub?`<i>${sub}</i>`:''}</div>`;
@@ -1998,7 +1984,7 @@ body.compact{padding:4px 8px;justify-content:center}body.compact .hd,body.compac
       `<span>อัปอีก <span class="v t">${L.eta!=null?eta(L.eta):'–'}</span></span>`+(L.hasMeso?`${sep}<span>Meso <span class="v m">${L.mesoEst?'≈':''}${fmtK(L.mesoHr)}</span>/ชม.</span>`:'')+
       `${sep}<span>⏱ <span class="clock">${from?hms(Date.now()-from):'0:00:00'}</span></span>${warn}`;
   }
-  // shared by the desktop overlay (LogBook Desktop) so both show exactly the same numbers
+  // the numbers the floating window shows
   function snapshot(){const L=OCR.live(),from=active?.startTime||L.t0;
     return {on:L.on,expHr:fmtK(L.expHr),pctHr:L.pctHr!=null?L.pctHr.toFixed(2)+'%':'–',pct:L.pct,eta:L.eta!=null?eta(L.eta):'–',
       mesoHr:L.hasMeso?(L.mesoEst?'≈':'')+fmtK(L.mesoHr):null,clock:from?hms(Date.now()-from):'0:00:00',farming:!!active,warn:L.black||L.errExp>=3||L.errMeso>=3,expNote:noteText(L,'exp'),mesoNote:noteText(L,'meso')};}
@@ -2410,25 +2396,13 @@ const SW=makeWizard({root:'startCard',steps:'sw_steps',back:'sw_back',next:'sw_n
     ocr:()=>{mountBlocks();mountDetect();$('ocrNeedShare').style.display=stream?'none':'';},
     stats:()=>{mountBlocks();if(stream&&OCR.hasRegions()&&!$('s_ocrConf').innerHTML)ocrConfirm('s');$('s_statsHint').textContent=$('ocrOn').checked?'✅ กำลังอ่านจออยู่ — EXP และเงินเติมให้แล้ว (แก้ได้) · ใส่เลเวลให้ถูกด้วยนะคะ':'ดูจากในเกมตอนนี้ แล้วกรอกตัวเลขได้เลย';},
     items:()=>mountBlocks(),
-    pip:()=>{mountBlocks();if(window.lbDesktop)$('pipHint').textContent='LogBook Desktop: หน้าต่างลอยโปร่งแสง ลอยทับเกมได้ ปรับความใสได้บนหน้าต่าง · คลิกทะลุ กด Ctrl+Shift+L (Mac: Cmd+Shift+L) · บน Windows ถ้าเกมเต็มจอจริงยังโดนบัง ให้ใช้ borderless';const m=PIP.getMode();document.querySelectorAll('input[name=pipmode]').forEach(r=>r.checked=r.value===m);$('pipAuto').checked=pipAutoOn();renderGlassGuide();},
+    pip:()=>{mountBlocks();const m=PIP.getMode();document.querySelectorAll('input[name=pipmode]').forEach(r=>r.checked=r.value===m);$('pipAuto').checked=pipAutoOn();},
     review:()=>{mountBlocks();renderStartReview();}
   }});
 function pipAutoOn(){try{return localStorage.getItem('logbook-pip-auto')==='1';}catch(e){return false;}}
 $('pipModes').onchange=e=>{if(e.target.name==='pipmode')PIP.setMode(e.target.value);};
 $('pipAuto').onchange=e=>{try{localStorage.setItem('logbook-pip-auto',e.target.checked?'1':'0');}catch(_){}};
 $('pipTry').onclick=()=>PIP.open();
-function renderGlassGuide(){
-  $('glassBody').innerHTML=window.lbDesktop?
-    `<p>คุณเปิดผ่าน <b>LogBook Desktop</b> อยู่แล้ว 🎉 หน้าต่างลอยโปร่งแสงได้ในตัว ใช้แถบเลื่อนบนหน้าต่างลอยเพื่อปรับความใส และกด <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>L</kbd> เพื่อเปิด/ปิดโหมดคลิกทะลุ</p>`:
-    `<h4>ทาง 1 · Windows: ใช้โปรแกรมฟรี WindowTop</h4>
-     <ol><li>ติดตั้ง <b>WindowTop</b> จาก Microsoft Store (เวอร์ชันฟรีทำโปร่งแสงและคลิกทะลุได้)</li>
-     <li>เปิดหน้าต่างลอยของ LogBook ตามปกติ</li>
-     <li>คลิกที่หน้าต่างลอย 1 ครั้ง แล้วกด <kbd>Alt</kbd>+<kbd>A</kbd> เพื่อทำให้โปร่งแสง (ปรับความใสในเมนูของ WindowTop)</li>
-     <li>อยากให้คลิกทะลุไปโดนเกม: เปิด Click-through ในเมนูของ WindowTop · <kbd>Alt</kbd>+<kbd>Z</kbd> = ลอยบนสุด</li></ol>
-     <p class="muted small">ปุ่มลัดอ้างอิงจากหน้า WindowTop ใน Microsoft Store · ยังไม่ได้ทดสอบกับเกมจริง</p>
-     <h4>ทาง 2 · Windows / Mac: โปรแกรม LogBook Desktop</h4>
-     <p>เปิด LogBook ผ่านโปรแกรมของเราเอง หน้าต่างลอยจะโปร่งแสงได้ในตัว มีแถบเลื่อนปรับความใส และโหมดคลิกทะลุ ไม่ต้องลงโปรแกรมอื่นเพิ่ม (ขอไฟล์ได้จากผู้ดูแลคอมมู)</p>`;
-}
 function renderStartReview(){
   const v=$('s_char').value,isNew=v==='__new';
   const ch=isNew?{name:$('nc_name').value.trim(),job:ncJob(),branch:$('nc_branch').value||null,avatar:ncAvatar}:charOf(v);
