@@ -1012,7 +1012,7 @@ const OCR=(()=>{
   let worker=null,loading=null,timer=null,busy=false,drawMode=null,dragStart=null;
   let regions={exp:null,meso:null,who:null,map:null};          // normalised {x,y,w,h} in video-frame space
   const st={};                                // live state
-  function reset(keepLevel=false){Object.assign(st,{expCand:null,mesoCand:null,t0:null,exp:null,pct:null,meso:null,expGained:0,mesoCollected:0,expHist:[],mesoHist:[],lastExpT:null,lastMesoT:null,errExp:0,errMeso:0,black:false,log:[],reqs:[],expWin:[],mesoWin:[],expRej:[],mesoRej:[],level:keepLevel?st.level:null,levelSrc:keepLevel?st.levelSrc:null,lvVotes:[],levelAtExp:null,cycle:0,expBase:0,expCarry:0,mesoBase:0,activeMs:0,lastGainT:null,stillT:null,expRefT:null,expEst:false,mesoHidden:null,mesoSeenExp:null,lastMesoSeenT:null,hamp:[],kf:null,
+  function reset(keepLevel=false){Object.assign(st,{expCand:null,mesoCand:null,t0:null,exp:null,pct:null,meso:null,expGained:0,mesoCollected:0,expHist:[],mesoHist:[],lastExpT:null,lastMesoT:null,errExp:0,errMeso:0,black:false,log:[],reqs:[],expWin:[],mesoWin:[],expRej:[],mesoRej:[],level:keepLevel?st.level:null,levelSrc:keepLevel?st.levelSrc:null,lvVotes:[],levelAtExp:null,cycle:0,expBase:0,expCarry:0,mesoBase:0,activeMs:0,lastGainT:null,stillT:null,expRefT:null,expEst:false,mesoHidden:null,mesoSeenExp:null,lastMesoSeenT:null,mesoSteps:[],expSteps:[],hamp:[],kf:null,
     q:{reads:0,expOk:0,expRej:0,expNone:0,expEst:0,expTpl:0,mesoOk:0,mesoRej:0,mesoNone:0,mesoTpl:0,mesoHiddenReads:0,mesoEst:[],expSteps:0,hampelFlags:0,kalmanHr:null,relocate:0}});}
   reset();
   const ov=()=>$('ocrOverlay');
@@ -1127,6 +1127,16 @@ const OCR=(()=>{
       const out=document.createElement('canvas');out.width=ow;out.height=oh;const og=out.getContext('2d');const img=og.createImageData(ow,oh);img.data.fill(255);
       for(let y=by0;y<=by1;y++)for(let x=bx0;x<=bx1;x++){if(keep[lab[y*W+x]]){const o=((y-by0+pad)*ow+(x-bx0+pad))*4;img.data[o]=img.data[o+1]=img.data[o+2]=0;}}
       og.putImageData(img,0,0);return out;};
+    // glyphs one by one with clear space between them (Tesseract drops a glyph that touches its neighbour)
+    const paintSpaced=list=>{const gap=Math.round(modeH*0.45)+2,pad=Math.round(modeH*0.6)+6,by0=Math.min(...list.map(c=>c.y0)),by1=Math.max(...list.map(c=>c.y1));
+      const ow=list.reduce((a,c)=>a+c.w,0)+gap*(list.length-1)+pad*2,oh=by1-by0+1+pad*2;
+      const out=document.createElement('canvas');out.width=ow;out.height=oh;const og=out.getContext('2d');const img=og.createImageData(ow,oh);img.data.fill(255);
+      let ox=pad;for(const c of list){const id=idx.get(c);
+        for(let y=c.y0;y<=c.y1;y++)for(let x=c.x0;x<=c.x1;x++)if(lab[y*W+x]===id){const o=((y-by0+pad)*ow+(x-c.x0+ox))*4;img.data[o]=img.data[o+1]=img.data[o+2]=0;}
+        ox+=c.w+gap;}
+      og.putImageData(img,0,0);
+      const f=Math.max(1,Math.round(36/modeH));if(f===1)return out;                                // Tesseract misses small glyphs: ~36 px tall
+      const big=document.createElement('canvas');big.width=ow*f;big.height=oh*f;const bg=big.getContext('2d');bg.imageSmoothingEnabled=false;bg.drawImage(out,0,0,big.width,big.height);return big;};
     // "[" / "(" before the percentage: a narrow glyph taller than the digits
     // In MapleStory Classic the brackets around the % are coloured (green) while the digits are white,
     // so a strongly coloured glyph is the most reliable split point; a narrow tall glyph is the fallback.
@@ -1137,8 +1147,20 @@ const OCR=(()=>{
     const nAcc=live.filter(isAccent).length;
     const isBr=nAcc>=1&&nAcc<=3&&live.length-nAcc>=2?isAccent:isTallNarrow;
     const br=live.findIndex((c,i)=>i>=2&&isBr(c));
-    let num=null,pct=null;
-    if(br>0){const b=live[br];num=paint(live.slice(0,br));
+    let num=null,pct=null,pctOnly=false,pctInt=null,pctDigits=null;
+    // above 1,000,000 EXP the game shows only "[58.03%]": the OPENING bracket is the first glyph, so everything up to the
+    // closing bracket is the percentage — not a number followed by a bracket. The dot's position says how many digits
+    // come before it (1 or 2), so a dropped dot or a "%" read as a digit can't move the decimal point.
+    {const open=live.findIndex(isBr);
+      if(open>=0&&open<=1&&live.slice(0,open).every(c=>c.h>mh*1.1||c.w<=c.h*0.6)){
+        const inner=live.slice(open+1),cl=inner.findIndex(isBr),body=cl>=0?inner.slice(0,cl):inner;
+        if(body.length>=3){const xEnd=cl>=0?inner[cl].x0:1e9,ds=dots.filter(d=>d.x0>live[open].x1&&d.x1<xEnd);
+          pct=paint([...body,...ds]);pctOnly=true;
+          if(ds.length===1){const k=body.filter(c=>c.x1<ds[0].x0).length;
+            // with the dot found, the digits are exactly: k before it, 2 after it — paint only those, spread apart
+            // (the "%" is left out, so it can't be read as a 7, and touching glyphs can't hide one another)
+            if((k===1||k===2)&&body.length>=k+2){pctInt=k;pctDigits=paintSpaced(body.slice(0,k+2));}}}}}
+    if(br>0&&!pctOnly){const b=live[br];num=paint(live.slice(0,br));
       const after=live.slice(br+1),close=after.findIndex(isBr);
       const rest=close>=0?after.slice(0,close):after;                                      // stop at the closing bracket
       const xEnd=close>=0?after[close].x0:1e9;
@@ -1162,9 +1184,9 @@ const OCR=(()=>{
           for(let y=ya;y<yb;y++)for(let x=xa2;x<xb2;x++){t++;if(lab[y*W+x]===id)on++;}b+=on*2>=t?'1':'0';}return {b,a:+(w/modeH).toFixed(2)};};
     const shapes=list=>list.flatMap(pieces).map(shape);
     let gNum=null,gPct=null;
-    if(br>0){gNum=shapes(live.slice(0,br));const after=live.slice(br+1),close=after.findIndex(isBr);gPct=shapes(close>=0?after.slice(0,close):after);}
+    if(br>0&&!pctOnly){gNum=shapes(live.slice(0,br));const after=live.slice(br+1),close=after.findIndex(isBr);gPct=shapes(close>=0?after.slice(0,close):after);}
     const gAll=shapes(live);
-    return {canvas:paint(live),num,pct,count:live.length,modeH,box,W,H,gNum,gPct,gAll};
+    return {canvas:paint(live),num,pct,pctOnly,pctInt,pctDigits,count:live.length,modeH,box,W,H,gNum,gPct,gAll};
   }
   function variants(r0){let r=r0;
     const out=[];let raw=null;
@@ -1290,19 +1312,30 @@ const OCR=(()=>{
       const t=res.filter(r=>r.tpl&&r.val!=null);
       if(t.length>=2&&t.every(r=>same(kind,r.val,t[0].val))&&(kind!=='exp'||typeof EXP_REQ==='undefined'||fitsHint(t[0].val)))
         return {best:t[0],raw:V.raw,tries:0,all:t.map(x=>x.v.tag+':'+x.text),agree:t.length+2,list:V.list,byTpl:true};}
-    for(const v of V.list){let text,val;
-      if(kind==='exp'&&v.num&&v.pct){const a=(await w.recognize(v.num)).data.text.trim(),b=(await w.recognize(v.pct)).data.text.trim();
+    for(const v of V.list){let text,val,struct=false;
+      if(kind==='exp'&&v.pctOnly&&v.pct){let pc=null;
+        // raw-line mode (psm 13): the single-line mode drops a leading "5" in this font; digits only
+        if(v.pctDigits){await w.setParameters(P_RAW);pMode='raw';const D=(await w.recognize(v.pctDigits)).data.text.replace(/[^\d]/g,'');await useParams(w,false);text=`[${D}]`;
+          if(D.length===v.pctInt+2){pc=+(D.slice(0,v.pctInt)+'.'+D.slice(v.pctInt));struct=true;}}   // one digit per glyph, or nothing
+        else{const b=(await w.recognize(v.pct)).data.text.trim(),m=b.match(/(\d{1,3})\.(\d{2})/);text=`[${b}]`;if(m)pc=+(m[1]+'.'+m[2]);}
+        val=pc!=null&&pc<=100?{exp:null,pct:pc}:null;}
+      else if(kind==='exp'&&v.num&&v.pct){const a=(await w.recognize(v.num)).data.text.trim(),b=(await w.recognize(v.pct)).data.text.trim();
         text=`${a} [${b}]`;const n=a.replace(/[^\d]/g,''),m=b.match(/(\d{1,3})\.(\d{2})/);
         const pc=m&&+(m[1]+'.'+m[2])<=100?+(m[1]+'.'+m[2]):null;
         val=n?{exp:parseInt(n,10),pct:pc}:(pc!=null?{exp:null,pct:pc}:null);
         if(val&&val.pct==null){const f=parseExp(text);if(f?.pct!=null)val.pct=f.pct;}}
       else{text=(await w.recognize(v.canvas)).data.text.trim();val=kind==='exp'?parseExp(text):parseMeso(text);}
       if(kind==='exp'){val=fromPct(val);if(val&&val.exp==null)val=null;}           // % only and no level yet = nothing usable
-      res.push({v,text,val});
+      res.push({v,text,val,struct:struct&&val!=null});
       // stop early once 3 reads agree on a believable value (an EXP read must include the %, a Meso read at least 3 digits)
       const solid=kind==='exp'?val?.pct!=null&&(typeof EXP_REQ==='undefined'||fitsHint(val)):val!=null&&(String(val).length>=3||st.meso!=null&&Math.abs(val-st.meso)<1000);
       if(solid&&agreeCount(res,kind,val)>=3)break;
       if(res.length>=10)break;}
+    // %-only reads checked against the screen layout (digit count from the dot's place): two that agree settle it
+    const sr=res.filter(r=>r.struct);
+    if(kind==='exp'&&sr.length>=2){
+      const top=[...new Map(sr.map(r=>[r.val.pct,sr.filter(o=>o.val.pct===r.val.pct).length]))].sort((a,b)=>b[1]-a[1])[0];
+      if(top&&top[1]>=2){const b=sr.find(r=>r.val.pct===top[0]);return {best:b,raw:V.raw,tries:res.length,all:res.map(x=>x.v.tag+':'+x.text),agree:top[1]+2,list:V.list};}}
     const best=pickBest(res,kind);
     return {best,raw:V.raw,tries:res.length,all:res.map(x=>x.v.tag+':'+x.text),agree:best?.val!=null?agreeCount(res,kind,best.val)+(best.voted?2:0):0,list:V.list};
   }
@@ -1329,12 +1362,13 @@ const OCR=(()=>{
         if(st.exp!=null){const d=r.val.exp-st.exp;sc+=d>=0&&d<Math.max(5000,st.exp*0.5)?3:(r.val.pct!=null&&st.pct>60&&r.val.pct<40?2:-2);}}
       else{const len=String(r.val).length;sc+=len>=3&&len<=11?1:-4;sc+=Math.min(len,9)*0.2;
         if(st.meso!=null){sc+=Math.abs(r.val-st.meso)<=Math.max(500000,st.meso*0.5)?3:-2;}}
-      sc+=(agreeCount(res,kind,r.val)-1)*3;if(r.voted)sc+=2.5;if(r.tpl)sc+=4;
+      sc+=(agreeCount(res,kind,r.val)-1)*3;if(r.voted)sc+=2.5;if(r.tpl)sc+=4;if(r.struct)sc+=6;
       if(sc>bs){bs=sc;best=r;}}
     return best||res[0]||null;
   }
   /* ---- reading words: the character box (LV + job + name) and the minimap title ---- */
   const P_DIGITS={tessedit_char_whitelist:'0123456789.%[]()',tessedit_pageseg_mode:'7'};
+  const P_RAW={tessedit_char_whitelist:'0123456789',tessedit_pageseg_mode:'13'};
   const P_WORDS={tessedit_char_whitelist:"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789 .:<>-'(),/",tessedit_pageseg_mode:'6'};
   let pMode='digits';
   async function useParams(w,words){const k=words?'words':'digits';if(pMode!==k){await w.setParameters(words?P_WORDS:P_DIGITS);pMode=k;}}
@@ -1504,7 +1538,7 @@ const OCR=(()=>{
      • A box drawn by hand stays as drawn ('manual'); "🧭 ให้ระบบหากรอบเอง" hands every box back to the finder. */
   const AF={P:115,who:[-2.017,-0.20,1.39,0.26],exp:[0.983,-0.226,1.26,0.278],map:[0.40,0.174,0.904,0.383],   // map-name lines inside the minimap, from its title bar's top-left (fixture: +46,+20, 104×44)
    
-    meso:{dx:-59,dy:2,w:90,h:19},tplMap:{src:'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAFAAAAASCAAAAADp6gYWAAAC5klEQVR42qXUv4ucRRgH8O/zzLwz8+67v3J7OcxdPD1MQoogimdjNJBolYCkMNiIhY2VrX9AIFZipYUQSCEGAjaCxEYwhWA0JoiHegde0JhIspvLuZt9995fM4/Froi5u2qnm+Yz3+/Mw9A33Rv7O5lgulVG7CshcdDtq3s6XEzpwSspQ2Qohb7b6Gy1l8OUoOLgtSnTOegrh+3scjJt5SDCPPhp5Rq4zd12kk1bmZkJf331McChimqVwxZtjoggNBQqyFNOQlSKUJ4ThgTJhTx5EkgeaNsSYS9rl04eP8rjE8iikYScUDXYWwCu4twbznsuKsgB7Epf9TU82CnkO4QkgNT6HT3e/fKjX5q/Xj/GXz+/tqaiZ5/orb+s1MYXtnni6urJObr5Q//w8fDZ3o32kYMotd3GCQBhk4QJ+P1HB46uXEtk8SJ9OtwX3z1257uXDG6fX1haTXs4UVy+rUdx9uHT0Zzd2wpB7XiRwjamSeU/z1zAyrm3L2peGp5+/938t35qSiTu7Bt/nHpn9dvL91451f18dOj0m4s3f62s2treVwiiXF1PEs7ecp3MSn/wMK+eTJJ0sxZDMjjT/Fkf7FP+Za9af6Z2oxsdeXU5Gpl4t4SZnYC6Koow0i2TpLP5A5MQjJgyz4q5+fSeS8xbr9kr1++/8F6jSCLUsBXvDBr34gTEgmkt1MnJAnfMDFycNL3WraVad0893u+5NY+Z2kwz3xc0CtY7eCQAqU3QB0nzuQPVwCGDQ2aKKop1VUhgZ8Nw2JEQQgiija6ySptkt8kWGSaXzp0NQZOSTKKWgoWCVcErhrYQMLhh7WQkhBE5r4h2+23yuOnl8V6HNKwpC/NfckXjR5PAgBaAQEAQAhTB7wJSIqU6k34ygA6s/v79MaPgoeCZABEiAUTAVI49iOB/6R5NqlIymXn9KQ1dBbm/cWvICGAEMIkX4sCMMIYhAFQIRBTCvxA/AhYW0aBcrD+gfwAJKj8udZ9wGQAAAABJRU5ErkJggg==',w:80,h:18},tplMeso:{src:'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAFEAAAAYCAAAAACns05OAAADG0lEQVR42q2UTWhcVRTHf+e++z6meVMTzbRmUlraSKVoaXRhWyxSaBYuTIkoVFEXLqSISwWrCxG3btzozm50ISJVsSIoDaIgGlq0ar+rJJJWZxKSTDJfmTf3Xhczk2krmc6AZ/Pe/71zf/dwz/0f+ZL1Q7CGHiKeTL22UfvrJzicsbZ7oEssWP1Opxx71zO17pEigNFfdNzVvfRkyXVdowO0Vh1zrPLoLYy6zbYiPRK5HZGegWoZ4DMRkUY5IfByWwJY45zC2EY4aD6ttRaUNabxGYBEAzCR6+ujFMOHz20D3j620dMnnmi1cHHFxcML+bqt1EQF8UCtVKwGUUaKxWoUpzfPzZetTqcHGxUoHQOwCS6eeBF2P/8NoDLw9W9PtWpc9g9ezs+V9px+aMCJTp0vrO6NtJ+bLW7fEgRXlxaiA0ZH3p9OAGy7169/msCe45mmHB+abtVY3HZfcrIUj/74aOCAmfn0IQW/zPgP7ISVqdXt+wGmjQAY3QJ+PPR4NQZqDXnt8L3t004YrQxsLtydcEaHC8mBradtWD6fnZj9fKXywpVHNnybCheXmubz14hHXn33xpa9/8retX5rj1/3XfpoPCLcB9eXzkwdheTnKlbbcj313Y6DcP37Jqm2RqR80yXoX26/ez7RhZkNglR+Er1YKBc/yajB+0vUr5UNqn5pJdZbHptsZmuYzOyGv0ZGm8sBODs/2CaGkdMXi4HyxdSkls7fmWXVM3G14rJ1XXBZVwmtBLSJh/b/AIevAjD15uLYsTHs6MNvtW/5pmAm53yZHbjctwO85f5hI14pVz+Z3eXJuWCo33h67kLrhmsgAHY19B9fcWp8DDN8zw0nENbOevjm72DaKhA1/49oTznn5/OeVnraKu15qmVoDRSA4w359ESqGoH/e+pmpxqrtDMowBnxBGMaDq5jPQ+MQTUsa7VTV0YcRE0XRS50wB23Olr9V6hb/0izxlym0+hJTI+TQvSp8Nz6Y1pXR+o90DwliD7acZgNvVHtfqCJE0Hr9zpP5ErXQCH8YOeDkugy/1N4fmie3Yr8C8CsNyZJB7jYAAAAAElFTkSuQmCC',w:81,h:24}};
+    meso:{dx:-151.1,dy:1.1,w:152.8,h:16.5},tplMap:{src:'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAFAAAAASCAAAAADp6gYWAAAC5klEQVR42qXUv4ucRRgH8O/zzLwz8+67v3J7OcxdPD1MQoogimdjNJBolYCkMNiIhY2VrX9AIFZipYUQSCEGAjaCxEYwhWA0JoiHegde0JhIspvLuZt9995fM4/Froi5u2qnm+Yz3+/Mw9A33Rv7O5lgulVG7CshcdDtq3s6XEzpwSspQ2Qohb7b6Gy1l8OUoOLgtSnTOegrh+3scjJt5SDCPPhp5Rq4zd12kk1bmZkJf331McChimqVwxZtjoggNBQqyFNOQlSKUJ4ThgTJhTx5EkgeaNsSYS9rl04eP8rjE8iikYScUDXYWwCu4twbznsuKsgB7Epf9TU82CnkO4QkgNT6HT3e/fKjX5q/Xj/GXz+/tqaiZ5/orb+s1MYXtnni6urJObr5Q//w8fDZ3o32kYMotd3GCQBhk4QJ+P1HB46uXEtk8SJ9OtwX3z1257uXDG6fX1haTXs4UVy+rUdx9uHT0Zzd2wpB7XiRwjamSeU/z1zAyrm3L2peGp5+/938t35qSiTu7Bt/nHpn9dvL91451f18dOj0m4s3f62s2treVwiiXF1PEs7ecp3MSn/wMK+eTJJ0sxZDMjjT/Fkf7FP+Za9af6Z2oxsdeXU5Gpl4t4SZnYC6Koow0i2TpLP5A5MQjJgyz4q5+fSeS8xbr9kr1++/8F6jSCLUsBXvDBr34gTEgmkt1MnJAnfMDFycNL3WraVad0893u+5NY+Z2kwz3xc0CtY7eCQAqU3QB0nzuQPVwCGDQ2aKKop1VUhgZ8Nw2JEQQgiija6ySptkt8kWGSaXzp0NQZOSTKKWgoWCVcErhrYQMLhh7WQkhBE5r4h2+23yuOnl8V6HNKwpC/NfckXjR5PAgBaAQEAQAhTB7wJSIqU6k34ygA6s/v79MaPgoeCZABEiAUTAVI49iOB/6R5NqlIymXn9KQ1dBbm/cWvICGAEMIkX4sCMMIYhAFQIRBTCvxA/AhYW0aBcrD+gfwAJKj8udZ9wGQAAAABJRU5ErkJggg==',w:80,h:18},tplMeso:{src:'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEoAAAAiCAAAAADdHBCaAAADm0lEQVR42q1WXW9UVRRda5+PO3faUugHKEYqSEnAxKDWBJUHIxFJ1Hd819/kH8GYmJho/CCYAqUBlfBpCrSlnU6nnc6duffcs30Y28rVt5n9cm72OVlnr73XXTn8PoZQRgwcSWbOLHVGTdSBoSSYpZv5qVHFwFimsF/5YnHqpAyBIhWPvjzyhfQG7lXHAqFQgyGEALkKhwQ1rBgilN0fAAhAARL4h3FfJAT//alQBUD2s3tC2oMiSyUI0cA+JhUgQNX9u2IfDyDL3SyolarQ3oakaT1fz1U17yko1qXeld1upmptmjh0u1lkUkvThK2tvIhik3pa75PYr0o6raMj25npNNKjjacHJoNSnB9FO2slU0V0bsRtd9s4CK2N5j2R7Z2DUohLx7SUKsGseO/Vbx4328vvX75678KFEgTI5Z9b7bmLUIDZD/d7Jz8di4L537KwMf7ZjALEwwUoXyRY5BMjJ4pn/vQpHMIkTGaFgGLypakAkAxFMnvMQlTHZ5ebM4dNACFUQVmZoJYZ5o59e+CTOuIYML+QWuvTMrx59s+va6nzXlanL3WvdiXvzn189dHFse+WRrxL6qUtK21XCtENp23TelO3mJipGV9s9MzOhs467/G81WPq2h3Xbsyhzk2d9onz7Q3jq1AQQ9zQDzavvHbeeMGJEwDwy5p5eOv8JQC41sh7iNZbzXqQcG3qIwfg+Y9RqmJQ4wzKzkpzp4QIsbXmYbe2eqHduDcOIabOLiaIeVvbQWGks7wwTZHw1tpKRaJK4wTJ+vVu9CCBxXlPitPuduf6rXTETH7+ejMgdhpZ0VOI5muPOZrIubcPLVd/HE3Ew0gojYHzFmfGLSHJ+p2XZxido2mu94o/kndDjuifrqanRnvqjfErKza+OEFFLXUwLKMY2NRhYgIA8MqTk2/0T9y+zzA/ew4Aln7VsXf6Jrf1U3RFFSrRu+ObUpq08WC9/iREkIDf1NUEkTTlpgvwzd+9Gv+sFvKF8UiIbRrNY5Wg17/EEpK0bpp0fVUpAIXSuqEUMcaIqt25DWOsWBQPIkWMWNFcWBEDQZRQkERUEgA0AmoAUkOJSMKAGgiFMSA0FlCptn3XToi+H+neDQDivqMh7ib750D+F2rX8Por/28HfGGDFUPm8Lw9ZVnqMLz9Xnr3+OE4hMrID3l8biotywFxpJbZI+Wh6ZF80CeD6NomrwS1g9YE2OLOUysuDvpSI2k1938Dsdah/WgYfEAAAAAASUVORK5CYII=',w:42,h:19.3}};
   let auto={src:{},anchor:null,hud:null},mesoOff=false,AFC={};
   const isAuto=k=>auto.src[k]!=='manual';
   const imgCanvas=src=>new Promise(res=>{const im=new Image();im.onload=()=>{const c=document.createElement('canvas');c.width=im.width;c.height=im.height;c.getContext('2d').drawImage(im,0,0);res(c);};im.onerror=()=>res(null);im.src=src;});
@@ -1571,7 +1605,8 @@ const OCR=(()=>{
     const L=anchorAt();
     if(L){const {k,a}=L,p=findPicture(AFC.anchor,a.w*k,a.h*k,null,0.7);if(p)return normBox(p.x+a.dx*k,p.y+a.dy*k,a.bw*k,a.bh*k);}
     if(!AFC.meso)return null;const s0=uiScale(hu);let best=null;
-    for(const f of [0.6,0.75,0.9,1.05,1.25,1.5,1.8]){const s=s0*f,p=findPicture(AFC.meso,AF.tplMeso.w*s,AF.tplMeso.h*s,null,0.6);if(p&&(!best||p.s>best.p.s))best={p,s};}
+    // the inventory follows the UI scale; a little slack
+    for(const f of [0.8,0.9,1,1.12,1.25]){const s=s0*f,p=findPicture(AFC.meso,AF.tplMeso.w*s,AF.tplMeso.h*s,null,0.6);if(p&&(!best||p.s>best.p.s))best={p,s};}
     if(!best)return null;const {p,s}=best,M=AF.meso;return normBox(p.x+M.dx*s,p.y+M.dy*s,M.w*s,M.h*s);}
   // is the Meso field on screen right now? (the inventory can be closed or moved)
   function mesoVisible(){const r=regions.meso;if(!r)return false;const W=video.videoWidth,H=video.videoHeight;
@@ -1582,7 +1617,9 @@ const OCR=(()=>{
   // after a good Meso read: remember the picture beside the box (the "MESOS" label / field edge) to find it again later
   async function learnMesoAnchor(){const r=regions.meso;if(!r||!stream)return;const W=video.videoWidth,H=video.videoHeight;
     const bx=r.x*W,by=r.y*H,bw=r.w*W,bh=r.h*H;
-    const tries=[[bx+bw,by-bh*0.4,Math.max(bh*3,bw*0.5),bh*1.8],[bx-Math.max(bh*3,bw*0.5),by-bh*0.4,Math.max(bh*3,bw*0.5),bh*1.8]];
+    // stay INSIDE the inventory window: the "MESOS" label right of the field is ~2.4 field-heights wide and the window ends
+    // just after it — anything further out is the game scene, which changes when the window moves
+    const tries=[[bx+bw,by-bh*0.15,bh*2.4,bh*1.3],[bx-bh*2.4,by-bh*0.15,bh*2.4,bh*1.3]];
     for(const [x,y,w,h] of tries){if(x<0||y<0||x+w>W||y+h>H)continue;
       const G=grayFrom(video,x,y,w,h,w,h);let m=0;for(const v of G.g)m+=v;m/=G.g.length;let v2=0;for(const v of G.g)v2+=(v-m)*(v-m);
       if(Math.sqrt(v2/G.g.length)<12)continue;                                    // too plain to be found again
@@ -1628,6 +1665,8 @@ const OCR=(()=>{
   function setLevel(L,src){st.level=L;st.levelSrc=src;if(!(st.pct!=null&&st.pct>=90))st.levelAtExp=L;}
   function cleanExp(v){
     if(!v||!isFinite(v.exp)||v.exp<=0)return null;v={exp:v.exp,pct:v.pct,est:!!v.est};
+    // past 1,000,000 EXP the game shows only the %: a plain number read there can't be on screen (e.g. "58.25%" read as 58,257)
+    if(!v.est&&st.exp!=null&&st.exp>=EXP_HIDE&&!(v.pct!=null&&st.pct>60&&v.pct<40))return null;
     if(typeof EXP_REQ!=='undefined'&&v.pct!=null){
       if(!v.est){const Ls=fitLevels(v);   // runs even when the level came from the form: a stale "62" is outvoted by the bar                  // the bar itself tells the level —
         st.lvVotes=[...(st.lvVotes||[]),Ls.length===1?Ls[0]:null].slice(-7);           // but a misread % digit points a level off,
@@ -1645,6 +1684,9 @@ const OCR=(()=>{
       if(v.pct==null)v.pct=+(v.exp/R*100).toFixed(2);}
     return v;
   }
+  // a big accepted jump that the screen has since gone back on: {from,to} where the value now is ≈ from
+  function undoJump(steps,val,tol){if(!steps||!steps.length)return null;const k=steps.length-1,s=steps[k];
+    if(Math.abs(val-s.from)<=tol*2&&s.to-s.from>tol){steps.splice(k,1);return s;}return null;}
   function smooth(win,val){win.push(val);if(win.length>3)win.shift();return win.length<3?null:med(win);}
   function rebaseIfStuck(rej,val,t,tol,apply){ // 3 rejected reads that agree with each other = the old baseline was wrong
     rej.push({val,t});if(rej.length>3)rej.shift();
@@ -1708,8 +1750,10 @@ const OCR=(()=>{
     const d=e-st.exp,dt=Math.max(1,(t-(st.lastExpT||t))/1000);
     const cap=R?Math.max(R*0.01,R*0.0005*dt):Math.max(5000,st.exp*0.02);           // a believable step for the time passed
     if(d<0||d>cap){rebaseIfStuck(st.expRej,e,t,R?R*0.01:5000,val=>{
-        st.expBase+=val-st.exp;                                                   // a misread baseline: move it, never count the jump
+        const j=val<st.exp?undoJump(st.expSteps,val,R?R*0.01:5000):null;if(j)st.q.undone=(st.q.undone||0)+1;
+        if(!j)st.expBase+=val-st.exp;                                             // a misread baseline: move it, never count the jump
         st.exp=val;st.pct=reqNow()?+(val/reqNow()*100).toFixed(2):pct;st.lastExpT=t;st.expGained=expTotal();st.expHist.push({t,c:st.expGained});});return false;}
+    if(R&&d>R*0.004)st.expSteps=[...(st.expSteps||[]),{from:st.exp,to:e,t}].slice(-5);           // remember big jumps
     if(d>0)creditGain(t);else st.stillT=t;                                    // same EXP on a clear read = proof of a pause
     shadow(d,dt,!!v.est);
     st.expRej.length=0;st.exp=e;st.expEst=!!v.est;st.pct=pct??st.pct;st.lastExpT=t;st.expGained=expTotal();st.expHist.push({t,c:st.expGained});
@@ -1731,7 +1775,8 @@ const OCR=(()=>{
     if(v==null||!isFinite(v))return false;const exPrev=mesoExtra(t);
     // back after the inventory was closed: the old reads in the median window are stale. A sure read (digit templates or
     // several variants agree) is taken at once — opening the inventory for a second is enough; otherwise wait for agreement.
-    if(st.meso!=null&&st.lastMesoT&&t-st.lastMesoT>intervalMs()*2.5){if(sure)st.mesoWin=[v,v];else{st.mesoWin=[v];return false;}}
+    const gap=st.meso!=null&&t-(st.mesoTryT||st.lastMesoT||t)>intervalMs()*2.5;st.mesoTryT=t;      // any read counts — only a real gap resets
+    if(gap){if(sure)st.mesoWin=[v,v];else{st.mesoWin=[v];return false;}}
     if(String(v).length<3&&!(st.meso!=null&&Math.abs(v-st.meso)<1000))return false;   // "1", "41" … = a stray mark
     const m=smooth(st.mesoWin,v);if(m==null)return false;
     if(st.meso==null){st.meso=st.mesoBase=m;st.t0=st.t0||t;st.lastMesoT=t;st.mesoHist.push({t,c:0});mesoSeen(t,null);return true;}
@@ -1740,7 +1785,12 @@ const OCR=(()=>{
     if(d<0||d>cap){rebaseIfStuck(st.mesoRej,m,t,Math.max(2000,m*0.005),val=>{
         // a lasting change that is not farming (bought potions, sold items, or the start value was misread):
         // move the starting point with it so it is not counted as Meso earned
-        st.mesoBase+=val-st.meso;st.meso=val;st.lastMesoT=t;st.mesoCollected=mesoTotal();st.mesoHist.push({t,c:st.mesoCollected});});return false;}
+        // …unless the screen went back to where it was before one recent big jump: then THAT jump was the misread
+        // (e.g. accepted right after the inventory reopened) — undo it instead of keeping it as earnings
+        const tol=Math.max(2000,val*0.005),j=undoJump(st.mesoSteps,val,tol);
+        if(!j)st.mesoBase+=val-st.meso;else st.q.undone=(st.q.undone||0)+1;
+        st.meso=val;st.lastMesoT=t;st.mesoCollected=mesoTotal();st.mesoHist.push({t,c:st.mesoCollected});});return false;}
+    if(d>Math.max(3000,st.meso*0.004))st.mesoSteps=[...(st.mesoSteps||[]),{from:st.meso,to:m,t}].slice(-5);   // remember big jumps
     const prev=st.meso;st.mesoRej.length=0;st.meso=m;st.lastMesoT=t;st.mesoCollected=mesoTotal();st.mesoHist.push({t,c:st.mesoCollected});mesoSeen(t,prev,exPrev);return true;
   }
   // start from the values the player confirmed (start of the adventure) — the reader then only has to follow changes
@@ -1900,7 +1950,7 @@ const OCR=(()=>{
   }
   function restart(){const was=!!timer;reset(true);   // ↺ keeps the level: the EXP table check needs it from the first read
 renderLog();render();$('ocrHint').textContent='↺ เริ่มนับใหม่แล้ว — ตัวเลขจะขึ้นอีกครั้งในไม่กี่วินาที';if(was)start();else if(stream)readOnce();}
-  return {init,live,setTicker,readNow,seed,restart,rememberMap,checkBoxes,learnMeso:async v=>{if(!stream||!regions.meso||v==null)return;const r=await readNow();if(!r.listMeso)return;const dm=String(v);for(const x of r.listMeso){const g=alignGlyphs(x.gAll,dm.length);if(g)await tplLearn('meso',g,dm);}},_tpl:()=>TPL,_tplLearn:tplLearn,_levelCanvases:()=>levelCanvases(regions.who).map(c=>c.toDataURL()),_fromPct:v=>fromPct(v),_titlePrint:titlePrint,_printSim:printSim,_variants:k=>{const V=variants(regions[k]);return V?V.list.map(v=>({tag:v.tag,count:v.count,modeH:v.modeH,img:v.canvas.toDataURL()})):null;},hasRegions:()=>!!(regions.exp||regions.meso),hasAny:()=>Object.values(regions).some(Boolean),has:k=>!!regions[k],readWho,readMap,_readNow:readNow,reset:()=>{reset();render();},snapshot:()=>({expGained:st.expGained,mesoCollected:st.mesoCollected,t0:st.t0,quality:{...st.q,mesoEst:st.q.mesoEst.slice(-20),rateHr:Math.round(expRate()||0),mesoExtra:Math.round(mesoExtra()),auto:{...auto.src}}}),autoFind,autoText,setMap,_findHud:findHud,_locateMeso:()=>locateMeso(auto.hud),_mesoVisible:mesoVisible,_auto:()=>auto,_mesoExtra:mesoExtra,_seek:seekMeso,_learnAnchor:learnMesoAnchor,_mesoOff:()=>mesoOff,_setMesoOff:v=>{mesoOff=!!v;st.mesoHidden=v?Date.now():null;},_setRegion:(k,v)=>{regions[k]=v;},_live:()=>live(),_render:()=>render(),stop,drawBoxes,_parseExp:parseExp,_parseMeso:parseMeso,_st:st,_accExp:acceptExp,_reqNow:reqNow,_accMeso:acceptMeso,_repairExp:v=>repairExp(v),_fitLevels:fitLevels,_setHint:h=>{levelHint=h;}};
+  return {init,live,setTicker,readNow,seed,restart,rememberMap,checkBoxes,learnMeso:async v=>{if(!stream||!regions.meso||v==null)return;const r=await readNow();if(!r.listMeso)return;const dm=String(v);for(const x of r.listMeso){const g=alignGlyphs(x.gAll,dm.length);if(g)await tplLearn('meso',g,dm);}},_tpl:()=>TPL,_tplLearn:tplLearn,_levelCanvases:()=>levelCanvases(regions.who).map(c=>c.toDataURL()),_fromPct:v=>fromPct(v),_titlePrint:titlePrint,_printSim:printSim,_variants:k=>{const V=variants(regions[k]);return V?V.list.map(v=>({tag:v.tag,count:v.count,modeH:v.modeH,img:v.canvas.toDataURL()})):null;},hasRegions:()=>!!(regions.exp||regions.meso),hasAny:()=>Object.values(regions).some(Boolean),has:k=>!!regions[k],readWho,readMap,_readNow:readNow,reset:()=>{reset();render();},snapshot:()=>({expGained:st.expGained,mesoCollected:st.mesoCollected,t0:st.t0,quality:{...st.q,mesoEst:st.q.mesoEst.slice(-20),rateHr:Math.round(expRate()||0),mesoExtra:Math.round(mesoExtra()),auto:{...auto.src}}}),autoFind,autoText,setMap,_findHud:findHud,_locateMeso:()=>locateMeso(auto.hud),_mesoVisible:mesoVisible,_auto:()=>auto,_mesoExtra:mesoExtra,_seek:seekMeso,_learnAnchor:learnMesoAnchor,_mesoOff:()=>mesoOff,_setMesoOff:v=>{mesoOff=!!v;st.mesoHidden=v?Date.now():null;},_setRegion:(k,v)=>{regions[k]=v;},_live:()=>live(),_variants:k=>variants(regions[k]),_readRegion:async k=>readRegion(await ensure(),k),_render:()=>render(),stop,drawBoxes,_parseExp:parseExp,_parseMeso:parseMeso,_st:st,_accExp:acceptExp,_reqNow:reqNow,_accMeso:acceptMeso,_repairExp:v=>repairExp(v),_fitLevels:fitLevels,_setHint:h=>{levelHint=h;}};
 })();
 
 // two taps within 3 s → start counting again from what is on screen now (regions are kept)

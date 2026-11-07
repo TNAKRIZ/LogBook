@@ -1,7 +1,7 @@
 // No boxes drawn: the reader finds the HUD (HP/MP gauges), the minimap and the Meso field by itself, at several capture sizes,
 // notices when the inventory is closed, and finds the Meso field again after the window moved.
 const {chromium}=require('playwright');
-const IMG='fixtures/real-hud-63-full.jpg',MESO='fixtures/meso-zoom.png';
+const IMG='fixtures/real-hud-63-full.jpg',MESO='fixtures/real-meso-row-68.png';   // the real inventory Meso row (430,107), cut from Harry's Lv.68 screen
 const CASES=[{k:1,name:'1456 screenshot'},{k:1.76,name:'2560 capture'},{k:0.8,name:'1165 small'}];
 (async()=>{const b=await chromium.launch();let pass=0,total=0;
 for(const C of CASES){
@@ -11,7 +11,7 @@ for(const C of CASES){
   const out=await p.evaluate(async([C,IMG,MESO])=>{const im=await loadImg(IMG),mz=await loadImg(MESO);const W=Math.round(im.width*C.k),H=Math.round(im.height*C.k);
     const cv=document.createElement('canvas');cv.width=W;cv.height=H;const g=cv.getContext('2d');let inv={x:0.62,y:0.18,on:true};
     const draw=()=>{g.imageSmoothingEnabled=true;g.drawImage(im,0,0,W,H);
-      if(inv.on){const s=C.k*0.95;g.fillStyle='#d9d4c8';g.fillRect(inv.x*W-20*s,inv.y*H-30*s,(mz.width+40)*s,(mz.height+40)*s);g.drawImage(mz,inv.x*W,inv.y*H,mz.width*s,mz.height*s);}
+      if(inv.on){const s=C.k*115/202.4;/* that screen's UI is 1.76× the 1456 screenshot's */g.fillStyle='#d9d4c8';g.fillRect(inv.x*W-20*s,inv.y*H-30*s,(mz.width+40)*s,(mz.height+40)*s);g.drawImage(mz,inv.x*W,inv.y*H,mz.width*s,mz.height*s);}
       requestAnimationFrame(draw);};draw();
     const st=cv.captureStream(5);stream=st;video.srcObject=st;video.play();await new Promise(r=>setTimeout(r,700));
     await put('kv',{exp:null,meso:null,who:null,map:null},'ocrRegions');await put('kv',null,'ocrAuto');await put('kv',[],'mapPrints');await OCR.init();
@@ -28,7 +28,7 @@ for(const C of CASES){
     return res;},[C,IMG,MESO]);
   const small=C.k<1;   // at 0.8× the digits are ~7 px: hand-drawn boxes misread them too (reading limit, not finding)
   const chk={hud:!!(out.found?.exp&&out.found?.who),...(small?{}:{exp:out.exp?.exp===40652,level:out.level===63}),name:out.name==='TNAKRIZ',map:out.map==='Camp 1',
-    meso:out.meso===1247717,hidden:out.hiddenSeen===true&&out.visibleAtOld===false,moved:out.mesoAfterMove===1247717};
+    meso:out.meso===430107,hidden:out.hiddenSeen===true&&out.visibleAtOld===false,moved:out.mesoAfterMove===430107};
   for(const k in chk){total++;pass+=chk[k];}
   console.log(C.name,JSON.stringify(chk));console.log('   ',JSON.stringify(out).slice(0,600),errs.join(';'));await ctx.close();}
 console.log(`AUTO FIND PASS ${pass}/${total}`);await b.close();})();
