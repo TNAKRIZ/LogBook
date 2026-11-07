@@ -185,6 +185,7 @@ video{width:100%;background:#000;border-radius:10px;aspect-ratio:16/9;object-fit
 .stats{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px}
 .stat{background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:10px}
 .stat .k{font-size:12px;color:var(--muted)}
+.stale{border:2px solid #d9661a;background:#fff3e2}.stale .row{margin-top:8px}
 .quitbar{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}.quitbar[hidden]{display:none}
 .ckpt summary{cursor:pointer;list-style:revert}.ckpt[open] summary{margin-bottom:8px}
 .stat .v{font-size:20px;font-weight:700;overflow-wrap:anywhere;font-family:var(--num)}
@@ -412,6 +413,7 @@ footer a{color:inherit}
   <!-- ===== while farming ===== -->
   <div id="activeArea" style="display:none">
     <!-- while farming only this bar shows; the checkpoint and the end-of-session steps open when the player is done -->
+    <div class="card mt stale" id="staleNote" hidden></div>
     <div class="card mt quitbar" id="quitBar">
       <div><b>เล่นเสร็จแล้ว?</b><div class="muted small">กดเมื่อจะเลิกเล่น แล้วค่อยจดค่าตอนจบ ยา ของดรอป</div></div>
       <button type="button" class="btn" id="btnQuit">⏹️ เลิกเล่น / จบรอบ</button>
@@ -1799,7 +1801,8 @@ const OCR=(()=>{
         st.expWin=[e,e,e];}
       st.exp=e;st.expEst=!!v.est;st.pct=pctNew;st.levelAtExp=st.level;st.expRej.length=0;st.lastExpT=t;st.expGained=expTotal();st.expHist.push({t,c:st.expGained});return true;}
     const d=e-st.exp,dt=Math.max(1,(t-(st.lastExpT||t))/1000);
-    const cap=R?Math.max(R*0.01,R*0.0005*dt):Math.max(5000,st.exp*0.02);           // a believable step for the time passed
+    let cap=R?Math.max(R*0.01,R*0.0005*dt):Math.max(5000,st.exp*0.02);           // a believable step for the time passed
+    if(R&&st.hamp.length>=6){const r=med(st.hamp);if(r>0)cap=Math.min(cap,Math.max(R*0.01,r*dt*4));}   // …and for how fast THIS player has been gaining
     if(d<0||d>cap){rebaseIfStuck(st.expRej,e,t,R?R*0.01:5000,val=>{
         const j=val<st.exp?undoJump(st.expSteps,val,R?R*0.01:5000):null;if(j)st.q.undone=(st.q.undone||0)+1;
         if(!j)st.expBase+=val-st.exp;                                             // a misread baseline: move it, never count the jump
@@ -1857,9 +1860,10 @@ const OCR=(()=>{
   // EXP/hr and Meso/hr count only farming time: the clock stops once a clear read shows no EXP for 15 s (AFK, town, shopping…)
   const IDLE_MS=15000;
   const expIdle=()=>quietSince()!=null;
-  const expRate=()=>st.activeMs>=20000?st.expGained/(st.activeMs/3.6e6):null;
+  const RATE_MIN_MS=120000;   // under 2 min of farming a rate is mostly noise
+  const expRate=()=>st.activeMs>=RATE_MIN_MS?st.expGained/(st.activeMs/3.6e6):null;
   // Meso/hr on the same farming clock when EXP is being read; otherwise real time
-  const mesoRate=()=>{const M=st.mesoCollected+mesoExtra();return regions.exp&&st.activeMs>=20000?M/(st.activeMs/3.6e6):perHr(M,st.t0);};
+  const mesoRate=()=>{const M=st.mesoCollected+mesoExtra();return regions.exp?(st.activeMs>=RATE_MIN_MS?M/(st.activeMs/3.6e6):null):perHr(M,st.t0);};
   function isBlack(){const c=document.createElement('canvas');c.width=48;c.height=27;const g=c.getContext('2d',{willReadFrequently:true});
     g.drawImage(video,0,0,48,27);const d=g.getImageData(0,0,48,27).data;let mx=0;for(let i=0;i<d.length;i+=4)mx=Math.max(mx,d[i],d[i+1],d[i+2]);return mx<24;}
   const shot=(cv,h)=>{if(!cv)return null;const c=document.createElement('canvas');const k=h/cv.height;c.width=Math.max(1,Math.round(cv.width*k));c.height=h;
@@ -1905,6 +1909,7 @@ const OCR=(()=>{
         if(regions.exp&&!r.black){if(r.exp?.est)q.expEst++;if(/แม่แบบ/.test(r.rawExp))q.expTpl++;okE?q.expOk++:(r.exp?q.expRej++:q.expNone++);}
         if(regions.meso&&!r.black){if(mesoOff)q.mesoHiddenReads++;else{if(/แม่แบบ/.test(r.rawMeso))q.mesoTpl++;okM?q.mesoOk++:(r.meso!=null?q.mesoRej++:q.mesoNone++);}}}
       if(okM&&!auto.anchor)learnMesoAnchor();
+      if(okE)document.dispatchEvent(new Event('lb-gain'));
       if(okE&&r.exp&&!r.exp.est&&r.expSure&&r.expLevel!=null&&r.expLevel===(st.levelAtExp??st.level)&&st.level===r.expLevel&&st.cycle%20===1&&regions.who)learnLevel(r.expLevel).catch(()=>{});   // proven: keep its LV shapes
       if(okE&&r.exp&&!r.exp.est&&r.expSure&&r.expLevel!=null&&r.expLevel!==(st.levelAtExp??st.level)){
         st.lvProof=st.lvProof?.L===r.expLevel?{L:r.expLevel,n:st.lvProof.n+1}:{L:r.expLevel,n:1};
@@ -1959,7 +1964,7 @@ const OCR=(()=>{
   function live(){
     const eMin=perMin(st.expHist),eHr=expRate(),mMin=perMin(st.mesoHist),mHr=mesoRate();
     const req=reqNow()||(st.pct>0?st.exp/(st.pct/100):null),rate=eHr,left=req?req-st.exp:null;
-    return {on:!!timer,exp:st.exp,pct:st.pct,expHr:rate,pctHr:req&&rate?rate/req*100:null,eta:left!=null&&rate?left/rate*3.6e6:null,
+    return {on:!!timer,activeMs:st.activeMs,exp:st.exp,pct:st.pct,expHr:rate,pctHr:req&&rate?rate/req*100:null,eta:left!=null&&rate?left/rate*3.6e6:null,
       mesoHr:mHr||(mMin?mMin*60:null),t0:st.t0,idle:!!timer&&expIdle(),activeMs:st.activeMs,errExp:st.errExp,errMeso:st.errMeso,hasExp:!!regions.exp,hasMeso:!!regions.meso||mesoExtra()>0,mesoEst:mesoExtra()>0,black:!!st.black};
   }
   // the reader runs on a timer owned by a *visible* window: the floating window when it is open, so a hidden tab is not throttled
@@ -2084,8 +2089,8 @@ body.compact{padding:4px 8px;justify-content:center}body.compact .hd,body.compac
       cell('','%/ชม.',L.pctHr!=null?L.pctHr.toFixed(2)+'%':'–',L.pct!=null?`ตอนนี้ ${L.pct}%`:'')+
       cell('eta','อัปเลเวลในอีก',L.eta!=null?eta(L.eta):'–')+
       cell('meso','Meso/ชม.',L.hasMeso?(L.mesoEst?'≈':'')+fmtK(L.mesoHr):'–',note(L,'meso'));
-    const from=active?.startTime||L.t0;
-    ft.innerHTML=`<span><span class="dot ${L.on?'on':''}"></span>${L.on?'กำลังอ่านจอ':'ยังไม่ได้เปิดอ่าน'}</span><span>⏱ ${active?'ฟาร์มไป':'อ่านมา'} <span class="clock">${from?hms(Date.now()-from):'0:00:00'}</span></span>`;
+    const from=active?.startTime||L.t0,farm=L.activeMs>0;      // the farming clock (what the rates use); wall time only before any EXP
+    ft.innerHTML=`<span><span class="dot ${L.on?'on':''}"></span>${L.on?'กำลังอ่านจอ':'ยังไม่ได้เปิดอ่าน'}</span><span>⏱ ${farm?'ฟาร์มไป':'อ่านมา'} <span class="clock">${farm?hms(L.activeMs):from?hms(Date.now()-from):'0:00:00'}</span></span>`;
     const sep='<span class="sep">·</span>',warn=L.errExp>=3||L.errMeso>=3?' <span class="warn">⚠</span>':'';
     d.getElementById('bar').innerHTML=`<img alt="" src="${LOGO_IMG.book}"><span class="dot ${L.on?'on':''}"></span>`+
       `<span>EXP <span class="v e">${fmtK(L.expHr)}</span>/ชม.</span>${sep}<span><span class="v">${L.pctHr!=null?L.pctHr.toFixed(2)+'%':'–'}</span>/ชม.</span>${sep}`+
@@ -2280,7 +2285,7 @@ async function cancelSession(){
   await del('kv','active');active=null;clearInterval(autoTimer);showActive();
 }
 function showActive(){
-  $('startCard').style.display=active?'none':'';$('activeArea').style.display=active?'':'none';if(!active)showQuit(false);$('liveGrid').style.display=active?'':'none';
+  $('startCard').style.display=active?'none':'';$('activeArea').style.display=active?'':'none';if(!active)showQuit(false);checkStale();$('liveGrid').style.display=active?'':'none';
   if(active)EW.reset();else{whoSeen=null;mapSeen=null;$('whoNote').innerHTML='';$('mapNote').innerHTML='';$('detectAll').innerHTML='';SW.reset();}mountBlocks();
   clearInterval(tickTimer);if(active)tickTimer=setInterval(renderLive,30000);renderLive();
 }
@@ -2542,6 +2547,18 @@ function buildEnd(){
   const s={...active,items,end:e,endTime:Date.now()};s.prices=snapshotPrices(s);
   return {s,e,items};
 }
+/* a session left open for hours (page closed, PC slept, a different file opened) would count all that time:
+   ask whether to finish it, drop it, or carry on */
+const STALE_MS=6*3.6e6;let staleOk=false,lastSeenSave=0;
+document.addEventListener('lb-gain',()=>{if(!active)return;const now=Date.now();if(now-lastSeenSave<60000)return;lastSeenSave=now;active.lastT=now;put('kv',active,'active').catch(()=>{});});
+function checkStale(){const el=$('staleNote');if(!el)return;const last=active&&(active.lastT||active.startTime),gap=last?Date.now()-last:0;
+  if(!active||staleOk||gap<STALE_MS){el.hidden=true;return;}
+  el.hidden=false;el.innerHTML=`<b>⚠️ รอบนี้ค้างมาตั้งแต่ ${dayKey(active.startTime)} ${timeStr(active.startTime)}</b> <span class="muted">(ไม่ได้อ่าน EXP มา ${dur(gap)})</span>
+    <div class="muted small">เวลาที่ค้างไว้จะถูกนับเป็นเวลาเล่น ทำให้สถิติรอบนี้เพี้ยน · ${esc(active.mapName||'')}</div>
+    <div class="row"><button type="button" class="btn sm" id="staleEnd">⏹️ จบรอบเก่า</button><button type="button" class="btn ghost sm" id="staleDrop">🗑 ยกเลิกรอบเก่า</button><button type="button" class="btn ghost sm" id="staleKeep">▶️ เล่นรอบนี้ต่อ</button></div>`;
+  $('staleEnd').onclick=()=>{staleOk=true;el.hidden=true;showQuit(true);};
+  $('staleDrop').onclick=()=>$('btnCancel').click();
+  $('staleKeep').onclick=()=>{staleOk=true;el.hidden=true;};}
 function showQuit(on){const a=$('quitArea'),b=$('quitBar');if(!a||!b)return;a.hidden=!on;b.hidden=on;
   if(on){a.scrollIntoView({behavior:'smooth',block:'start'});}}
 $('btnQuit')?.addEventListener('click',()=>showQuit(true));
