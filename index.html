@@ -185,6 +185,8 @@ video{width:100%;background:#000;border-radius:10px;aspect-ratio:16/9;object-fit
 .stats{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px}
 .stat{background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:10px}
 .stat .k{font-size:12px;color:var(--muted)}
+.quitbar{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}.quitbar[hidden]{display:none}
+.ckpt summary{cursor:pointer;list-style:revert}.ckpt[open] summary{margin-bottom:8px}
 .stat .v{font-size:20px;font-weight:700;overflow-wrap:anywhere;font-family:var(--num)}
 .stat.big .v{font-size:24px}
 .good{color:var(--good)} .bad{color:var(--bad)} .warn{color:var(--warn)}
@@ -409,8 +411,14 @@ footer a{color:inherit}
 
   <!-- ===== while farming ===== -->
   <div id="activeArea" style="display:none">
-    <div class="card mt">
-      <h2>⏱️ จุดเช็กระหว่างเล่น</h2>
+    <!-- while farming only this bar shows; the checkpoint and the end-of-session steps open when the player is done -->
+    <div class="card mt quitbar" id="quitBar">
+      <div><b>เล่นเสร็จแล้ว?</b><div class="muted small">กดเมื่อจะเลิกเล่น แล้วค่อยจดค่าตอนจบ ยา ของดรอป</div></div>
+      <button type="button" class="btn" id="btnQuit">⏹️ เลิกเล่น / จบรอบ</button>
+    </div>
+    <div id="quitArea" hidden>
+    <details class="card mt ckpt">
+      <summary><b>⏱️ จุดเช็กระหว่างเล่น</b> <span class="muted small">(ไม่บังคับ)</span></summary>
       <p class="muted small" style="margin-top:0">ใส่ EXP ตอนนี้เพื่อดู EXP/ชม. แบบเรียลไทม์ (ถ่ายภาพหน้าจอแนบให้ด้วย)</p>
       <div class="fields">
         <div><label>เลเวล</label><input id="c_level" type="number" inputmode="numeric"></div>
@@ -418,7 +426,7 @@ footer a{color:inherit}
         <div><label>EXP %</label><input id="c_pct" type="number" step="0.01" inputmode="decimal"></div>
       </div>
       <div class="row" style="margin-top:12px"><button class="btn ghost" id="btnCheck">บันทึกจุดเช็ก</button></div>
-    </div>
+    </details>
 
     <div class="card mt" id="endCard">
       <h2>⏹️ จบรอบ — จดข้อมูลหลังเลิกเล่น</h2>
@@ -465,6 +473,8 @@ footer a{color:inherit}
         <button type="button" class="btn" id="ew_next">Next →</button>
         <button type="button" class="btn go" id="btnEnd">💾 จบรอบและบันทึก</button>
       </div>
+    </div>
+    <div class="row" style="margin-top:10px"><button type="button" class="btn ghost sm" id="btnResume">↩ ยังไม่จบ — กลับไปเล่นต่อ</button></div>
     </div>
   </div>
 </section>
@@ -1940,7 +1950,10 @@ const OCR=(()=>{
     const exp=fresh(st.lastExpT)?st.exp:null,pct=fresh(st.lastExpT)?st.pct:null,meso=fresh(st.lastMesoT)?st.meso:null;
     const lvl=st.level;
     if(!active){fill('s_exp',exp);fill('s_pct',pct);fill('s_mesos',meso);fill('s_level',lvl);}
-    else{fill('c_exp',exp);fill('c_pct',pct);fill('e_exp',exp);fill('e_pct',pct);fill('e_mesos',meso);fill('c_level',lvl);fill('e_level',lvl);
+    else{const proven=['exp','wrap','bar'].includes(st.levelSrc);
+      for(const id of ['c_level','e_level']){const el=$(id);if(el&&lvl!=null&&proven&&num(el.value)!==lvl){el.value=lvl;el.dataset.auto='1';}}   // proved by the EXP bar
+      const ex2=st.expEst?null:exp;for(const id of ['c_exp','e_exp']){const el=$(id);if(el&&st.expEst&&el.dataset.auto!=='0')el.value='';}  // past 1M: % only
+      fill('c_exp',ex2);fill('c_pct',pct);fill('e_exp',ex2);fill('e_pct',pct);fill('e_mesos',meso);fill('c_level',lvl);fill('e_level',lvl);
       const em=$('e_mesos');if(em){const ex=mesoExtra();em.placeholder=meso==null&&(st.meso!=null||ex>0)?`เปิดกระเป๋าในเกมแป๊บนึง หรือพิมพ์เอง${ex>0&&st.meso!=null?` (ประมาณ ≈${fmt(Math.round(st.meso+ex))})`:''}`:'';}}
   }
   function live(){
@@ -1995,7 +2008,7 @@ const OCR=(()=>{
   }
   function restart(){const was=!!timer;reset(true);   // ↺ keeps the level: the EXP table check needs it from the first read
 renderLog();render();$('ocrHint').textContent='↺ เริ่มนับใหม่แล้ว — ตัวเลขจะขึ้นอีกครั้งในไม่กี่วินาที';if(was)start();else if(stream)readOnce();}
-  return {init,live,setTicker,readNow,seed,restart,rememberMap,checkBoxes,learnMeso:async v=>{if(!stream||!regions.meso||v==null)return;const r=await readNow();if(!r.listMeso)return;const dm=String(v);for(const x of r.listMeso){const g=alignGlyphs(x.gAll,dm.length);if(g)await tplLearn('meso',g,dm);}},_tpl:()=>TPL,_tplLearn:tplLearn,_levelCanvases:()=>levelCanvases(regions.who).map(c=>c.toDataURL()),_fromPct:v=>fromPct(v),_titlePrint:titlePrint,_printSim:printSim,_variants:k=>{const V=variants(regions[k]);return V?V.list.map(v=>({tag:v.tag,count:v.count,modeH:v.modeH,img:v.canvas.toDataURL()})):null;},hasRegions:()=>!!(regions.exp||regions.meso),hasAny:()=>Object.values(regions).some(Boolean),has:k=>!!regions[k],readWho,readMap,_readNow:readNow,reset:()=>{reset();render();},snapshot:()=>({expGained:st.expGained,mesoCollected:st.mesoCollected,t0:st.t0,quality:{...st.q,mesoEst:st.q.mesoEst.slice(-20),rateHr:Math.round(expRate()||0),mesoExtra:Math.round(mesoExtra()),auto:{...auto.src}}}),autoFind,autoText,setMap,_findHud:findHud,_locateMeso:()=>locateMeso(auto.hud),_mesoVisible:mesoVisible,_auto:()=>auto,_mesoExtra:mesoExtra,_seek:seekMeso,_learnAnchor:learnMesoAnchor,_mesoOff:()=>mesoOff,_setMesoOff:v=>{mesoOff=!!v;st.mesoHidden=v?Date.now():null;},_setRegion:(k,v)=>{regions[k]=v;},_live:()=>live(),_relevel:relevel,_learnLevel:learnLevel,_readLevelDigits:async()=>readLevelDigits(await ensure()),learnLevel,_variants:k=>variants(regions[k]),_readRegion:async k=>readRegion(await ensure(),k),_render:()=>render(),stop,drawBoxes,_parseExp:parseExp,_parseMeso:parseMeso,_st:st,_accExp:acceptExp,_reqNow:reqNow,_accMeso:acceptMeso,_repairExp:v=>repairExp(v),_fitLevels:fitLevels,_setHint:h=>{levelHint=h;}};
+  return {init,live,setTicker,readNow,seed,restart,rememberMap,checkBoxes,learnMeso:async v=>{if(!stream||!regions.meso||v==null)return;const r=await readNow();if(!r.listMeso)return;const dm=String(v);for(const x of r.listMeso){const g=alignGlyphs(x.gAll,dm.length);if(g)await tplLearn('meso',g,dm);}},_tpl:()=>TPL,_tplLearn:tplLearn,_levelCanvases:()=>levelCanvases(regions.who).map(c=>c.toDataURL()),_fromPct:v=>fromPct(v),_titlePrint:titlePrint,_printSim:printSim,_variants:k=>{const V=variants(regions[k]);return V?V.list.map(v=>({tag:v.tag,count:v.count,modeH:v.modeH,img:v.canvas.toDataURL()})):null;},hasRegions:()=>!!(regions.exp||regions.meso),hasAny:()=>Object.values(regions).some(Boolean),has:k=>!!regions[k],readWho,readMap,_readNow:readNow,reset:()=>{reset();render();},snapshot:()=>({expGained:st.expGained,mesoCollected:st.mesoCollected,t0:st.t0,quality:{...st.q,mesoEst:st.q.mesoEst.slice(-20),rateHr:Math.round(expRate()||0),mesoExtra:Math.round(mesoExtra()),auto:{...auto.src}}}),autoFind,autoText,setMap,_findHud:findHud,_locateMeso:()=>locateMeso(auto.hud),_mesoVisible:mesoVisible,_auto:()=>auto,_mesoExtra:mesoExtra,_seek:seekMeso,_learnAnchor:learnMesoAnchor,_mesoOff:()=>mesoOff,_setMesoOff:v=>{mesoOff=!!v;st.mesoHidden=v?Date.now():null;},_setRegion:(k,v)=>{regions[k]=v;},_live:()=>live(),_relevel:relevel,autofill,_learnLevel:learnLevel,_readLevelDigits:async()=>readLevelDigits(await ensure()),learnLevel,_variants:k=>variants(regions[k]),_readRegion:async k=>readRegion(await ensure(),k),_render:()=>render(),stop,drawBoxes,_parseExp:parseExp,_parseMeso:parseMeso,_st:st,_accExp:acceptExp,_reqNow:reqNow,_accMeso:acceptMeso,_repairExp:v=>repairExp(v),_fitLevels:fitLevels,_setHint:h=>{levelHint=h;}};
 })();
 
 // two taps within 3 s → start counting again from what is on screen now (regions are kept)
@@ -2267,7 +2280,7 @@ async function cancelSession(){
   await del('kv','active');active=null;clearInterval(autoTimer);showActive();
 }
 function showActive(){
-  $('startCard').style.display=active?'none':'';$('activeArea').style.display=active?'':'none';$('liveGrid').style.display=active?'':'none';
+  $('startCard').style.display=active?'none':'';$('activeArea').style.display=active?'':'none';if(!active)showQuit(false);$('liveGrid').style.display=active?'':'none';
   if(active)EW.reset();else{whoSeen=null;mapSeen=null;$('whoNote').innerHTML='';$('mapNote').innerHTML='';$('detectAll').innerHTML='';SW.reset();}mountBlocks();
   clearInterval(tickTimer);if(active)tickTimer=setInterval(renderLive,30000);renderLive();
 }
@@ -2529,6 +2542,10 @@ function buildEnd(){
   const s={...active,items,end:e,endTime:Date.now()};s.prices=snapshotPrices(s);
   return {s,e,items};
 }
+function showQuit(on){const a=$('quitArea'),b=$('quitBar');if(!a||!b)return;a.hidden=!on;b.hidden=on;
+  if(on){a.scrollIntoView({behavior:'smooth',block:'start'});}}
+$('btnQuit')?.addEventListener('click',()=>showQuit(true));
+$('btnResume')?.addEventListener('click',()=>{showQuit(false);$('liveCard')?.scrollIntoView({behavior:'smooth',block:'start'});});
 const EW=makeWizard({root:'endCard',steps:'ew_steps',back:'ew_back',next:'ew_next',finish:'btnEnd',err:'ew_err',
   labels:['ค่าตอนจบ','ยา','ของดรอป','ETC','สรุป'],
   validate:{
