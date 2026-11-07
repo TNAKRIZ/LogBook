@@ -1012,7 +1012,7 @@ const OCR=(()=>{
   let worker=null,loading=null,timer=null,busy=false,drawMode=null,dragStart=null;
   let regions={exp:null,meso:null,who:null,map:null};          // normalised {x,y,w,h} in video-frame space
   const st={};                                // live state
-  function reset(keepLevel=false){Object.assign(st,{expCand:null,mesoCand:null,t0:null,exp:null,pct:null,meso:null,expGained:0,mesoCollected:0,expHist:[],mesoHist:[],lastExpT:null,lastMesoT:null,errExp:0,errMeso:0,black:false,log:[],reqs:[],expWin:[],mesoWin:[],expRej:[],mesoRej:[],level:keepLevel?st.level:null,levelSrc:keepLevel?st.levelSrc:null,lvVotes:[],levelAtExp:null,cycle:0,expBase:0,expCarry:0,mesoBase:0,activeMs:0,lastGainT:null,stillT:null,expRefT:null,expEst:false,mesoHidden:null,mesoSeenExp:null,lastMesoSeenT:null,mesoSteps:[],expSteps:[],hamp:[],kf:null,
+  function reset(keepLevel=false){Object.assign(st,{expCand:null,mesoCand:null,t0:null,exp:null,pct:null,meso:null,expGained:0,mesoCollected:0,expHist:[],mesoHist:[],lastExpT:null,lastMesoT:null,errExp:0,errMeso:0,black:false,log:[],reqs:[],expWin:[],mesoWin:[],expRej:[],mesoRej:[],level:keepLevel?st.level:null,levelSrc:keepLevel?st.levelSrc:null,lvVotes:[],levelAtExp:null,cycle:0,expBase:0,expCarry:0,mesoBase:0,activeMs:0,lastGainT:null,stillT:null,expRefT:null,expEst:false,mesoHidden:null,mesoSeenExp:null,lastMesoSeenT:null,mesoSteps:[],expSteps:[],bars:[],bar:null,lvProof:null,hamp:[],kf:null,
     q:{reads:0,expOk:0,expRej:0,expNone:0,expEst:0,expTpl:0,mesoOk:0,mesoRej:0,mesoNone:0,mesoTpl:0,mesoHiddenReads:0,mesoEst:[],expSteps:0,hampelFlags:0,kalmanHr:null,relocate:0}});}
   reset();
   const ov=()=>$('ocrOverlay');
@@ -1662,6 +1662,18 @@ const OCR=(()=>{
     let best=null,n=0;for(const r of st.reqs){const k=st.reqs.filter(o=>Math.abs(o-r)/r<=0.015).length;if(k>n){n=k;best=r;}}
     return n>=3?med(st.reqs.filter(o=>Math.abs(o-best)/best<=0.015)):null;}
   // a new level from the LV box or the bar: a correction, unless the bar is near its end (then it is a level-up the wrap will book)
+  /* The EXP bar proved a different level (an exact number + % that fit the table only there): every level since the start
+     of the session was off by the same amount, so redo the sums with the right table rows — finished bars (EXP needed − where
+     the session started on them) and the current bar's start if it was only a % estimate. */
+  function relevel(L){
+    const L0=st.levelAtExp??st.level;                                          // the level the bar's numbers were made with
+    if(L==null||L0==null||L===L0||typeof EXP_REQ==='undefined'||!EXP_REQ[L])return false;
+    const d=L-L0,sc=(a,b)=>EXP_REQ[a]&&EXP_REQ[b]?EXP_REQ[b]/EXP_REQ[a]:1;
+    st.expCarry=0;for(const b of st.bars){if(b.L==null)continue;const nL=b.L+d;if(b.est)b.base=Math.round(b.base*sc(b.L,nL));b.L=nL;st.expCarry+=Math.max(0,(EXP_REQ[nL]||0)-b.base);}
+    if(st.bar?.est)st.expBase=Math.round(st.expBase*sc(L0,L));
+    // values past 1M on this bar were % estimates made with the wrong row: rescale them too
+    const k=sc(L0,L);if(st.exp!=null&&(st.expEst||st.exp>=EXP_HIDE))st.exp=Math.round(st.exp*k);st.expWin=st.expWin.map(x=>x>=EXP_HIDE?Math.round(x*k):x);
+    st.level=st.levelAtExp=L;st.levelSrc='exp';st.lvVotes=[];st.reqs.length=0;st.expGained=expTotal();st.q.relevel=(st.q.relevel||0)+1;return true;}
   function setLevel(L,src){st.level=L;st.levelSrc=src;if(!(st.pct!=null&&st.pct>=90))st.levelAtExp=L;}
   function cleanExp(v){
     if(!v||!isFinite(v.exp)||v.exp<=0)return null;v={exp:v.exp,pct:v.pct,est:!!v.est};
@@ -1671,11 +1683,12 @@ const OCR=(()=>{
       if(!v.est){const Ls=fitLevels(v);   // runs even when the level came from the form: a stale "62" is outvoted by the bar                  // the bar itself tells the level —
         st.lvVotes=[...(st.lvVotes||[]),Ls.length===1?Ls[0]:null].slice(-7);           // but a misread % digit points a level off,
         const c=[...st.lvVotes.reduce((m,L)=>L==null?m:m.set(L,(m.get(L)||0)+1),new Map())].sort((a,b)=>b[1]-a[1]);
-        if(c[0]&&c[0][1]>=4&&c[0][1]-(c[1]?.[1]||0)>=3&&c[0][0]!==st.level)setLevel(c[0][0],'bar');}  // so it needs a clear majority
+        if(c[0]&&c[0][1]>=4&&c[0][1]-(c[1]?.[1]||0)>=3&&c[0][0]!==(st.levelAtExp??st.level))relevel(c[0][0]);}   // vs the BAR's level (the LV box may already show the next one)  // so it needs a clear majority; redo the sums
       // a repair must land on this exact level: a level-up is learned from the LV box / the bar wrapping, never from a repair
       // …except the first reads of the NEXT level right after the bar fills up (exact numbers that fit level+1)
       if(!v.est&&st.level!=null&&!expFitsAt(v,st.level)){
-        if(st.pct!=null&&st.pct>60&&v.pct<40&&expFitsAt(v,st.level+1))return {...v,next:true};
+        if(st.pct!=null&&st.pct>60&&v.pct<40){if(expFitsAt(v,st.level+1))return {...v,next:true};
+          const Ls=fitLevels(v);if(Ls.length===1)return {...v,next:true,provenL:Ls[0]};}               // the new bar proves a different level
         const fix=repairExp(v);if(!fix||fix.level!==st.level)return null;v={exp:fix.exp,pct:fix.pct};}}
     if(v.pct!=null&&v.pct>=0.3){const r=v.exp/(v.pct/100);st.reqs.push(r);if(st.reqs.length>20)st.reqs.shift();}
     const R=reqNow();
@@ -1728,10 +1741,13 @@ const OCR=(()=>{
     let e=smooth(st.expWin,v.exp);if(e==null)return false;
     if(R0&&st.exp!=null&&st.exp>=R0){st.exp=null;st.expBase=0;st.expHist.length=0;}                           // a baseline that can't exist at this level
     const pct=v.pct!=null&&v.exp===e?v.pct:(reqNow()?+(e/reqNow()*100).toFixed(2):v.pct);
-    if(st.exp==null){st.exp=st.expBase=e;st.expEst=!!v.est;st.pct=pct;st.levelAtExp=st.level;st.t0=st.t0||t;st.lastExpT=t;st.expRefT=t;st.stillT=null;st.expHist.push({t,c:0});return true;}
+    if(st.exp==null){st.exp=st.expBase=e;st.bar={est:!!v.est};st.expEst=!!v.est;st.pct=pct;st.levelAtExp=st.level;st.t0=st.t0||t;st.lastExpT=t;st.expRefT=t;st.stillT=null;st.expHist.push({t,c:0});return true;}
     const R=reqNow()||(st.pct>0?st.exp/(st.pct/100):null);
     // level-up = the bar wrapped (high % → low %). The finished level is the one the EXP values belonged to
     // (the LV box may already show the new one); bank its full table value, then continue on the next level.
+    // first exact read of a new bar that fits only level N: the bar that just filled was N−1 — fix the session's levels first
+    if(v.provenL!=null&&(st.levelAtExp??st.level)!=null&&v.provenL!==(st.levelAtExp??st.level)+1&&st.pct>60&&v.pct!=null&&v.pct<40){
+      st.levelAtExp=st.level=(st.levelAtExp??st.level);relevel(v.provenL-1);}
     const oldL=st.levelAtExp??st.level,Rold=oldL!=null&&typeof EXP_REQ!=='undefined'&&EXP_REQ[oldL]?EXP_REQ[oldL]:R;
     const pctNew=v.next&&v.exp===e?v.pct:pct;
     // …but only when it is possible: the EXP still needed to finish the old level plus what is now on the new bar must fit
@@ -1741,7 +1757,7 @@ const OCR=(()=>{
     const wrapFits=Rold&&st.exp!=null&&(Rold-st.exp)+e<=stepMax+Rold*0.002;                                  // 0.2%: rounding of % estimates
     const lvSays=oldL!=null&&st.level===oldL+1&&st.levelSrc!=='wrap';
     if(e<st.exp&&Rold&&st.exp<Rold*1.01&&st.pct!=null&&pctNew!=null&&st.pct>60&&st.pct<=100&&pctNew<40&&(wrapFits||lvSays)){
-      creditGain(t);st.expCarry+=Math.max(0,Rold-st.expBase);st.expBase=0;st.reqs.length=0;
+      creditGain(t);st.bars.push({L:oldL,base:st.expBase,est:!!st.bar?.est});st.expCarry+=Math.max(0,Rold-st.expBase);st.expBase=0;st.bar={est:false};st.reqs.length=0;
       if(oldL!=null&&typeof EXP_REQ!=='undefined'&&EXP_REQ[oldL+1]){
         if(st.level!==oldL+1){st.level=oldL+1;st.levelSrc='wrap';}st.lvVotes=[];
         if(v.est)e=Math.round(EXP_REQ[st.level]*pctNew/100);                                              // re-scale the estimate to the new level
@@ -1796,7 +1812,7 @@ const OCR=(()=>{
   // start from the values the player confirmed (start of the adventure) — the reader then only has to follow changes
   function seed(v,t=Date.now()){
     if(v.level!=null){st.level=st.levelAtExp=v.level;st.levelSrc='seed';}
-    if(v.exp!=null){st.exp=st.expBase=v.exp;st.expWin=[v.exp,v.exp];st.pct=v.pct??null;st.lastExpT=t;st.expRefT=t;st.stillT=null;st.expHist=[{t,c:0}];
+    if(v.exp!=null){st.exp=st.expBase=v.exp;st.bar={est:!!v.est||v.exp>=EXP_HIDE};st.expEst=st.bar.est;st.expWin=[v.exp,v.exp];st.pct=v.pct??null;st.lastExpT=t;st.expRefT=t;st.stillT=null;st.expHist=[{t,c:0}];
       if(v.pct>0.3){const r=v.exp/(v.pct/100);st.reqs=[r,r,r];}}
     if(v.mesos!=null){st.meso=st.mesoBase=v.mesos;st.mesoWin=[v.mesos,v.mesos];st.lastMesoT=t;st.mesoHist=[{t,c:0}];}
     st.t0=t;render();
@@ -1824,7 +1840,7 @@ const OCR=(()=>{
       out[k]=r.best?.val??null;out['all'+K]=r.all;out['raw'+K]=r.best?.text||'';out['img'+K]=shot(r.raw,36);out['bin'+K]=r.best?shot(r.best.v.canvas,30):null;
       if(k==='exp'&&out.exp){
         if(out.exp.est){out.expSure=true;out.rawExp+=` → ≈${out.exp.exp} (คิดจาก % × ตาราง EXP — เกมไม่โชว์ตัวเลขเมื่อเกินล้าน)`;}
-        else if(fitsHint(out.exp)){out.expSure=true;}
+        else if(fitsHint(out.exp)||fitLevels(out.exp).length===1){out.expSure=true;}       // fits another level: the level is wrong, not the read
         else{const fix=repairExp(out.exp);if(fix){out.rawExp+=` → แก้เป็น ${fix.exp} (ตรงกับตาราง EXP${fix.approx?' · ค่าประมาณ':''})`;out.exp={exp:fix.exp,pct:fix.pct};out.expSure=!fix.approx;}else out.expSure=false;}
         // the level the EXP bar itself proves (both numbers match the table at exactly that level)
         const Ls=out.exp.est?[]:fitLevels(out.exp);const H=levelHint??st.level;
@@ -1854,6 +1870,9 @@ const OCR=(()=>{
         if(regions.exp&&!r.black){if(r.exp?.est)q.expEst++;if(/แม่แบบ/.test(r.rawExp))q.expTpl++;okE?q.expOk++:(r.exp?q.expRej++:q.expNone++);}
         if(regions.meso&&!r.black){if(mesoOff)q.mesoHiddenReads++;else{if(/แม่แบบ/.test(r.rawMeso))q.mesoTpl++;okM?q.mesoOk++:(r.meso!=null?q.mesoRej++:q.mesoNone++);}}}
       if(okM&&!auto.anchor)learnMesoAnchor();
+      if(okE&&r.exp&&!r.exp.est&&r.expSure&&r.expLevel!=null&&r.expLevel!==(st.levelAtExp??st.level)){
+        st.lvProof=st.lvProof?.L===r.expLevel?{L:r.expLevel,n:st.lvProof.n+1}:{L:r.expLevel,n:1};
+        if(st.lvProof.n>=2){relevel(r.expLevel);st.lvProof=null;}}else if(okE)st.lvProof=null;
       if(okM&&r.listMeso&&r.meso===st.meso&&st.mesoWin.length>=3&&st.mesoWin.every(x=>x===r.meso)){const dm=String(r.meso);   // 3 identical accepted reads
         for(const v of r.listMeso){const g=alignGlyphs(v.gAll,dm.length);if(g)tplLearn('meso',g,dm);}}
       if(regions.exp){if(okE)st.errExp=0;else st.errExp++;st.rawExp=r.rawExp;}
@@ -1884,7 +1903,7 @@ const OCR=(()=>{
       stat('อัปเลเวลในอีก',left&&rate?dur(left/rate*3.6e6):'–')+
       (()=>{const ex=mesoExtra(),ago=st.lastMesoT?Math.round((Date.now()-st.lastMesoT)/60000):null,
         note=ex>0||mesoOff?` <span class="sub">${mesoOff||st.mesoHidden?'กระเป๋าปิด':'ยังไม่เห็นเงิน'}${ago!=null?` · เห็นล่าสุด ${ago} นาทีก่อน`:''}</span>`:'';
-        return stat('Meso ตอนนี้',(st.meso!=null?(ex>0?'≈':'')+fmt(Math.round(st.meso+ex)):'–')+note+warn(st.errMeso))+stat('Meso เก็บได้',(ex>0?'≈':'')+fmt(Math.round(st.mesoCollected+ex)));})()+
+        return stat('Meso ตอนนี้',(st.meso!=null?(ex>0?'≈':'')+fmt(Math.round(st.meso+ex)):'–')+note+warn(st.errMeso))+stat('Meso เก็บได้',st.meso==null&&!(ex>0)?'–':(ex>0?'≈':'')+fmt(Math.round(st.mesoCollected+ex)));})()+
       stat('Meso/นาที',fmtK(mMin))+stat('Meso/ชม. (เฉพาะเวลาฟาร์ม)',fmtK(mHr||(mMin?mMin*60:null)));
     if(typeof PIP!=='undefined')PIP.update();
   }
@@ -1950,7 +1969,7 @@ const OCR=(()=>{
   }
   function restart(){const was=!!timer;reset(true);   // ↺ keeps the level: the EXP table check needs it from the first read
 renderLog();render();$('ocrHint').textContent='↺ เริ่มนับใหม่แล้ว — ตัวเลขจะขึ้นอีกครั้งในไม่กี่วินาที';if(was)start();else if(stream)readOnce();}
-  return {init,live,setTicker,readNow,seed,restart,rememberMap,checkBoxes,learnMeso:async v=>{if(!stream||!regions.meso||v==null)return;const r=await readNow();if(!r.listMeso)return;const dm=String(v);for(const x of r.listMeso){const g=alignGlyphs(x.gAll,dm.length);if(g)await tplLearn('meso',g,dm);}},_tpl:()=>TPL,_tplLearn:tplLearn,_levelCanvases:()=>levelCanvases(regions.who).map(c=>c.toDataURL()),_fromPct:v=>fromPct(v),_titlePrint:titlePrint,_printSim:printSim,_variants:k=>{const V=variants(regions[k]);return V?V.list.map(v=>({tag:v.tag,count:v.count,modeH:v.modeH,img:v.canvas.toDataURL()})):null;},hasRegions:()=>!!(regions.exp||regions.meso),hasAny:()=>Object.values(regions).some(Boolean),has:k=>!!regions[k],readWho,readMap,_readNow:readNow,reset:()=>{reset();render();},snapshot:()=>({expGained:st.expGained,mesoCollected:st.mesoCollected,t0:st.t0,quality:{...st.q,mesoEst:st.q.mesoEst.slice(-20),rateHr:Math.round(expRate()||0),mesoExtra:Math.round(mesoExtra()),auto:{...auto.src}}}),autoFind,autoText,setMap,_findHud:findHud,_locateMeso:()=>locateMeso(auto.hud),_mesoVisible:mesoVisible,_auto:()=>auto,_mesoExtra:mesoExtra,_seek:seekMeso,_learnAnchor:learnMesoAnchor,_mesoOff:()=>mesoOff,_setMesoOff:v=>{mesoOff=!!v;st.mesoHidden=v?Date.now():null;},_setRegion:(k,v)=>{regions[k]=v;},_live:()=>live(),_variants:k=>variants(regions[k]),_readRegion:async k=>readRegion(await ensure(),k),_render:()=>render(),stop,drawBoxes,_parseExp:parseExp,_parseMeso:parseMeso,_st:st,_accExp:acceptExp,_reqNow:reqNow,_accMeso:acceptMeso,_repairExp:v=>repairExp(v),_fitLevels:fitLevels,_setHint:h=>{levelHint=h;}};
+  return {init,live,setTicker,readNow,seed,restart,rememberMap,checkBoxes,learnMeso:async v=>{if(!stream||!regions.meso||v==null)return;const r=await readNow();if(!r.listMeso)return;const dm=String(v);for(const x of r.listMeso){const g=alignGlyphs(x.gAll,dm.length);if(g)await tplLearn('meso',g,dm);}},_tpl:()=>TPL,_tplLearn:tplLearn,_levelCanvases:()=>levelCanvases(regions.who).map(c=>c.toDataURL()),_fromPct:v=>fromPct(v),_titlePrint:titlePrint,_printSim:printSim,_variants:k=>{const V=variants(regions[k]);return V?V.list.map(v=>({tag:v.tag,count:v.count,modeH:v.modeH,img:v.canvas.toDataURL()})):null;},hasRegions:()=>!!(regions.exp||regions.meso),hasAny:()=>Object.values(regions).some(Boolean),has:k=>!!regions[k],readWho,readMap,_readNow:readNow,reset:()=>{reset();render();},snapshot:()=>({expGained:st.expGained,mesoCollected:st.mesoCollected,t0:st.t0,quality:{...st.q,mesoEst:st.q.mesoEst.slice(-20),rateHr:Math.round(expRate()||0),mesoExtra:Math.round(mesoExtra()),auto:{...auto.src}}}),autoFind,autoText,setMap,_findHud:findHud,_locateMeso:()=>locateMeso(auto.hud),_mesoVisible:mesoVisible,_auto:()=>auto,_mesoExtra:mesoExtra,_seek:seekMeso,_learnAnchor:learnMesoAnchor,_mesoOff:()=>mesoOff,_setMesoOff:v=>{mesoOff=!!v;st.mesoHidden=v?Date.now():null;},_setRegion:(k,v)=>{regions[k]=v;},_live:()=>live(),_relevel:relevel,_variants:k=>variants(regions[k]),_readRegion:async k=>readRegion(await ensure(),k),_render:()=>render(),stop,drawBoxes,_parseExp:parseExp,_parseMeso:parseMeso,_st:st,_accExp:acceptExp,_reqNow:reqNow,_accMeso:acceptMeso,_repairExp:v=>repairExp(v),_fitLevels:fitLevels,_setHint:h=>{levelHint=h;}};
 })();
 
 // two taps within 3 s → start counting again from what is on screen now (regions are kept)
@@ -2149,7 +2168,7 @@ async function startSession(){
   const m=mapOf(mapId);
   active={id:uid(),schema:SCHEMA,charId:ch.id,charName:ch.name,job:ch.job,branch:ch.branch,mapId,mapName:m.name,party:Math.max(1,num($('s_party').value)||1),
     startTime:Date.now(),endTime:null,start:st,items,checks:[],startNote:$('s_note').value.trim()};
-  await put('kv',active,'active');OCR.reset();OCR.seed({level:st.level,exp:st.exp,pct:st.pct,mesos:st.mesos},active.startTime);
+  await put('kv',active,'active');OCR.reset();OCR.seed({level:st.level,exp:st.exp??expAt(st),est:st.exp==null&&st.pct!=null,pct:st.pct,mesos:st.mesos},active.startTime);
   fillCharSelect($('s_char'),ch.id);$('s_newCharBox').style.display='none';$('nc_name').value='';
   currentJob=ch.job;renderJobRow();
   if(stream)await saveShot('start','เริ่มผจญภัย');
@@ -2329,7 +2348,7 @@ async function detectAll(){
     let r=null;if(OCR.hasRegions()){r=await OCR.readNow(num($('s_level').value));
       // values from the screen replace anything carried over from last session (dataset.auto==='1'), never what the player typed
       const set=(id,v)=>{if(v==null)return;const el=$(id);if(el.value===''||el.dataset.auto==='1'){el.value=v;el.dataset.auto='1';}};
-      if(r.exp&&r.expSure!==false){set('s_exp',r.exp.exp);set('s_pct',r.exp.pct);}
+      if(r.exp&&r.expSure!==false){set('s_exp',r.exp.est?'':r.exp.exp);set('s_pct',r.exp.pct);}   // only % on screen: keep it a %, not a number made with a level that may be wrong
       {const ref=(charOf($('s_char').value))?.last?.mesos;     // a digit dropped or doubled lands far from what this character had
         if(r.meso!=null&&ref>0&&(r.meso<ref*0.5||r.meso>ref*2+1e6)){r.mesoSure=false;r.mesoFar=ref;}}
       if(r.meso!=null&&r.mesoSure!==false)set('s_mesos',r.meso);
