@@ -23,15 +23,16 @@ const {chromium}=require('playwright');const fs=require('fs');
   await p.click('#sw_next');console.log('next w/o stats ->',await err());
   await p.fill('#s_level','61');await p.fill('#s_exp','401304');await p.fill('#s_pct','31.44');await p.fill('#s_mesos','302957');
   await p.click('#sw_next');console.log('step:',await step());
+  console.log('potions/pip/boxes skipped → review:',await step());await p.click('#s_review [data-go=items]');console.log('opened from review:',await step());
   for(const [id,q] of [['2010005','1326'],['2002001','5'],['2000002','273']]){await p.click(`.pick[data-id="${id}"] input[type=checkbox]`);await p.fill(`.pick[data-id="${id}"] input[type=number]`,q);}
   await p.screenshot({path:S+'/w6.png'});
-  await p.click('#sw_next');console.log('step:',await step());
+  await p.click('#sw_next');console.log('back to review:',await step());await p.click('#s_review [data-go=pip]');
   await p.click('#pipModes label:has(input[value=compact])');
   await p.screenshot({path:S+'/w7.png'});
   await p.click('#sw_next');console.log('step:',await step());
   await p.screenshot({path:S+'/w8.png'});
   // jump back via stepper then forward via stepper
-  await p.click('#sw_steps li[data-n="3"]');console.log('jumped:',await step());await p.click('#sw_steps li[data-n="7"]');console.log('jumped fwd:',await step());
+  await p.click('#sw_steps li[data-n="4"]');console.log('jumped:',await step());await p.click('#sw_steps li[data-n="7"]');console.log('jumped fwd:',await step());
   await p.click('#btnStart');await p.waitForTimeout(300);
   console.log('active?',await p.evaluate(()=>!!active),'screenBlock top:',await p.evaluate(()=>!!document.querySelector('#screenHostTop #screenBlock')));
   await p.evaluate(async()=>{active.startTime-=2*3.6e6;await put('kv',active,'active');});

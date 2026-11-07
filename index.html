@@ -2427,9 +2427,14 @@ async function detectAll(){
 /* ===================== step-by-step wizards ===================== */
 function makeWizard(o){
   const root=$(o.root),panes=[...root.querySelectorAll('.wstep')],ol=$(o.steps);let i=0;
+  // optional steps (o.skip(key) → true) are left out of Next/Back and of the step bar; "แก้ไข" in the review still opens them
+  root.querySelectorAll('.wt').forEach(h=>{const t=h.firstChild;if(t&&t.nodeType===3)t.textContent=t.textContent.replace(/^\s*\d+\s*·\s*/,'');});
+  const skipped=n=>!!o.skip?.(panes[n].dataset.k),shown=n=>n===i||!skipped(n);
+  const step=(from,dir)=>{let n=from+dir;while(n>0&&n<panes.length-1&&skipped(n))n+=dir;return Math.max(0,Math.min(panes.length-1,n));};
   const err=m=>{$(o.err).textContent=m?'⚠️ '+m:'';};
   function draw(runEnter=true){
-    ol.innerHTML=o.labels.map((l,n)=>`<li class="${n===i?'on':n<i?'done':''}" data-n="${n}"><span>${n<i?'✓':n+1}</span>${l}</li>`).join('');
+    const vis=panes.map((_,n)=>n).filter(shown);
+    ol.innerHTML=vis.map((n,j)=>`<li class="${n===i?'on':n<i?'done':''}" data-n="${n}"><span>${n<i?'✓':j+1}</span>${o.labels[n]}</li>`).join('');
     panes.forEach((p,n)=>p.classList.toggle('on',n===i));
     const last=i===panes.length-1;
     $(o.back).style.visibility=i?'visible':'hidden';$(o.next).style.display=last?'none':'';$(o.finish).style.display=last?'':'none';err('');
@@ -2444,7 +2449,7 @@ function makeWizard(o){
     if(moved){const r=root.getBoundingClientRect();if(r.top<0)root.scrollIntoView({block:'start',behavior:'smooth'});}
     return true;
   }
-  $(o.back).onclick=()=>go(i-1);$(o.next).onclick=()=>go(i+1);
+  $(o.back).onclick=()=>go(step(i,-1));$(o.next).onclick=()=>go(step(i,1));
   ol.onclick=e=>{const li=e.target.closest('li');if(li)go(+li.dataset.n);};
   return {go,goKey:k=>go(panes.findIndex(p=>p.dataset.k===k)),reset:()=>{i=0;draw();},refresh:()=>draw(),cur:()=>panes[i]?.dataset.k,
     validateAll:()=>{for(let k=0;k<panes.length;k++){const e=check(k);if(e){i=k;draw();err(e);return false;}}return true;}};
@@ -2494,6 +2499,9 @@ $('nc_avClear').onclick=()=>{ncAvatar=null;drawNcAvatar();};
 /* ---- start wizard ---- */
 function checkedStartItems(){const out=[];$('s_items').querySelectorAll('.pick').forEach(p=>{if(p.querySelector('input[type=checkbox]').checked)out.push({id:p.dataset.id,qty:num(p.querySelector('input[type=number]').value)});});return out;}
 const SW=makeWizard({root:'startCard',steps:'sw_steps',back:'sw_back',next:'sw_next',finish:'btnStart',err:'sw_err',
+  // most players want EXP/hr and Meso/hr: boxes, character and map are found from the screen (skipped once known),
+  // potions and the floating window are optional — all still reachable from the review
+  skip:k=>k==='ocr'||k==='items'||k==='pip'||(k==='char'&&!!$('s_char').value&&$('s_char').value!=='__new')||(k==='map'&&!!$('s_map').value&&$('s_map').value!=='__new'),
   labels:['จอเกม','ตั้งกรอบอ่าน','ตัวละคร','แมพ','ค่าตอนเริ่ม','ยา','หน้าต่างลอย','ตรวจทาน'],
   validate:{
     char(){const v=$('s_char').value;if(!v)return 'เลือกหรือสร้างตัวละครก่อนนะคะ';
@@ -2529,7 +2537,7 @@ function renderStartReview(){
     ${row('จอเกม',stream?'✅ แชร์แล้ว · ถ่ายภาพอัตโนมัติ '+($('autoInt').value==='0'?'ปิด':'ทุก '+$('autoInt').value+' นาที'):'ไม่ได้แชร์ (กรอกเอง)','screen')}
     ${row('อ่านตัวเลข',$('ocrOn').checked?'✅ กำลังอ่าน EXP / Meso ทุก 5 วิ':'ไม่ได้เปิด','ocr')}
     ${row('ค่าตอนเริ่ม',`Lv.${esc($('s_level').value)} · EXP ${num($('s_exp').value)==null&&num($('s_pct').value)!=null?'≈'+fmt(expAt({pct:num($('s_pct').value),level:num($('s_level').value)})):fmt(num($('s_exp').value))}${$('s_pct').value?` (${esc($('s_pct').value)}%)`:''} · ${fmt(num($('s_mesos').value))} mesos`,'stats')}
-    ${row('ยา',items.length?items.map(i=>`<span class="chip iname">${ico(i.id,16)}${esc(itemOf(i.id)?.name||i.id)} ×${fmt(i.qty)}</span>`).join(' '):'ไม่ได้เลือกยา','items')}
+    ${row('ยา',items.length?items.map(i=>`<span class="chip iname">${ico(i.id,16)}${esc(itemOf(i.id)?.name||i.id)} ×${fmt(i.qty)}</span>`).join(' '):'ไม่ใส่ก็ได้ — ใส่ถ้าอยากรู้ค่ายาและกำไรสุทธิ','items')}
     ${row('หน้าต่างลอย',(PIP.getMode()==='compact'?'▬ แถบเล็ก':'▣ แบบเต็ม')+(pipAutoOn()?' · เปิดให้เองตอนเริ่ม':' · ไม่เปิดเอง'),'pip')}
    </div>`;
 }
@@ -2564,6 +2572,7 @@ function showQuit(on){const a=$('quitArea'),b=$('quitBar');if(!a||!b)return;a.hi
 $('btnQuit')?.addEventListener('click',()=>showQuit(true));
 $('btnResume')?.addEventListener('click',()=>{showQuit(false);$('liveCard')?.scrollIntoView({behavior:'smooth',block:'start'});});
 const EW=makeWizard({root:'endCard',steps:'ew_steps',back:'ew_back',next:'ew_next',finish:'btnEnd',err:'ew_err',
+  skip:k=>k==='potions'&&!(active?.items?.length),
   labels:['ค่าตอนจบ','ยา','ของดรอป','ETC','สรุป'],
   validate:{
     values(){if(expAt({exp:num($('e_exp').value),pct:num($('e_pct').value),level:num($('e_level').value)})==null||num($('e_mesos').value)==null)return 'กรอก EXP (หรือ % กับเลเวล) และเงิน ตอนจบรอบด้วยนะคะ';},
