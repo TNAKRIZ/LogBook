@@ -186,6 +186,9 @@ video{width:100%;background:#000;border-radius:10px;aspect-ratio:16/9;object-fit
 .stat{background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:10px}
 .stat .k{font-size:12px;color:var(--muted)}
 .stale{border:2px solid #d9661a;background:#fff3e2}.stale .row{margin-top:8px}
+.chatbox{margin-top:12px;padding-top:10px;border-top:1px dashed var(--line,#e2cfa8)}.chatbox h3{margin:0 0 8px;font-size:15px}
+.chatlist{list-style:none;margin:8px 0 0;padding:0;max-height:320px;overflow:auto}.chatlist li{padding:6px 0;border-bottom:1px solid var(--line,#eadcc0)}
+.chatlist .who{font-weight:700}.chatlist .orig{color:var(--muted,#8a7a66);font-size:13px}.chatlist .th{font-size:15px}
 .quitbar{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}.quitbar[hidden]{display:none}
 .ckpt summary{cursor:pointer;list-style:revert}.ckpt[open] summary{margin-bottom:8px}
 .stat .v{font-size:20px;font-weight:700;overflow-wrap:anywhere;font-family:var(--num)}
@@ -289,6 +292,13 @@ footer a{color:inherit}
         <div class="ocrzoom" id="ocrZoomWrap" hidden><span class="muted small">ภาพในกรอบ (ขยาย)</span><canvas id="ocrZoom"></canvas></div>
         <div class="stats" id="ocrStats" style="margin-top:8px"></div>
         <div class="row small muted" id="ocrPeek" style="margin-top:6px"></div>
+      </div>
+      <div class="chatbox" id="chatBox">
+        <h3>💬 แปลแชทในเกม</h3>
+        <div class="row"><button class="btn sm" id="chatGo" type="button">💬 แปลแชทตอนนี้</button>
+          <label class="small"><input type="checkbox" id="chatAuto"> แปลเองทุก 10 วิ</label></div>
+        <p class="muted small" id="chatNote" style="margin:6px 0 0">อ่านช่องแชทด้านล่างจอแล้วแปลเป็นไทย — แปลในเครื่อง (Chrome) ข้อความไม่ถูกส่งไปไหน · อังกฤษ / เกาหลี</p>
+        <ul class="chatlist" id="chatList"></ul>
       </div>
     </div>
   </div>
@@ -1095,19 +1105,28 @@ const OCR=(()=>{
     const nAcc=live.filter(isAccent).length;
     const isBr=nAcc>=1&&nAcc<=3&&live.length-nAcc>=2?isAccent:isTallNarrow;
     const br=live.findIndex((c,i)=>i>=2&&isBr(c));
-    let num=null,pct=null,pctOnly=false,pctInt=null,pctDigits=null;
+    let num=null,pct=null,pctOnly=false,pctInt=null,pctDigits=null,pctGl=null;
     // above 1,000,000 EXP the game shows only "[58.03%]": the OPENING bracket is the first glyph, so everything up to the
     // closing bracket is the percentage — not a number followed by a bracket. The dot's position says how many digits
     // come before it (1 or 2), so a dropped dot or a "%" read as a digit can't move the decimal point.
-    {const open=live.findIndex(isBr);
+    // when the brackets lose their colour in the cut (and are no taller than the digits), a thin glyph at both ends of a
+    // short line is still "[ … ]" — the game prints nothing else there
+    const thin=c=>c.w<=c.h*0.5,edgeBr=live.length>=6&&thin(live[0])&&thin(live[live.length-1])&&!live.slice(1,-1).every(thin);
+    const isB=c=>isBr(c)||(edgeBr&&(c===live[0]||c===live[live.length-1]));
+    {const open=live.findIndex(isB);
       if(open>=0&&open<=1&&live.slice(0,open).every(c=>c.h>mh*1.1||c.w<=c.h*0.6)){
-        const inner=live.slice(open+1),cl=inner.findIndex(isBr),body=cl>=0?inner.slice(0,cl):inner;
+        const inner=live.slice(open+1),cl=inner.findIndex(isB),body=cl>=0?inner.slice(0,cl):inner;
         if(body.length>=3){const xEnd=cl>=0?inner[cl].x0:1e9,ds=dots.filter(d=>d.x0>live[open].x1&&d.x1<xEnd);
           pct=paint([...body,...ds]);pctOnly=true;
           if(ds.length===1){const k=body.filter(c=>c.x1<ds[0].x0).length;
             // with the dot found, the digits are exactly: k before it, 2 after it — paint only those, spread apart
             // (the "%" is left out, so it can't be read as a 7, and touching glyphs can't hide one another)
-            if((k===1||k===2)&&body.length>=k+2){pctInt=k;pctDigits=paintSpaced(body.slice(0,k+2));}}}}}
+            if((k===1||k===2)&&body.length>=k+2){pctInt=k;pctDigits=paintSpaced(body.slice(0,k+2));pctGl=body.slice(0,k+2);}}
+          else if(!ds.length&&(body.length===4||body.length===5)){
+            // the dot was lost in the cut (it is 1–2 px): the last glyph is the "%", so 3 or 4 digits with 2 decimals —
+            // and the dot's place is the widest gap between them; both must agree
+            const dg=body.slice(0,-1),k=dg.length-2,gaps=dg.slice(1).map((c,i)=>c.x0-dg[i].x1),wide=gaps.indexOf(Math.max(...gaps));
+            if(wide===k-1&&gaps[wide]>=Math.max(2,1.4*[...gaps].sort((a,b)=>a-b)[gaps.length>>1])){pctInt=k;pctDigits=paintSpaced(dg);pctGl=dg;}}}}}
     if(br>0&&!pctOnly){const b=live[br];num=paint(live.slice(0,br));
       const after=live.slice(br+1),close=after.findIndex(isBr);
       const rest=close>=0?after.slice(0,close):after;                                      // stop at the closing bracket
@@ -1132,6 +1151,7 @@ const OCR=(()=>{
           for(let y=ya;y<yb;y++)for(let x=xa2;x<xb2;x++){t++;if(lab[y*W+x]===id)on++;}b+=on*2>=t?'1':'0';}return {b,a:+(w/modeH).toFixed(2)};};
     const shapes=list=>list.flatMap(pieces).map(shape);
     let gNum=null,gPct=null;
+    if(pctOnly&&pctGl)gPct=shapes(pctGl);                                        // the % digits alone (no dot, no % sign)
     if(br>0&&!pctOnly){gNum=shapes(live.slice(0,br));const after=live.slice(br+1),close=after.findIndex(isBr);gPct=shapes(close>=0?after.slice(0,close):after);}
     const gAll=shapes(live);
     return {canvas:paint(live),num,pct,pctOnly,pctInt,pctDigits,count:live.length,modeH,box,W,H,gNum,gPct,gAll};
@@ -1169,10 +1189,13 @@ const OCR=(()=>{
      the glyphs of that read are stored as examples of their digits. Later reads compare each glyph with those examples —
      a shape comparison, not a guess — and are used only when every glyph matches one digit clearly. */
   let TPL=null;const TPL_MAX=6;
-  async function tplLoad(){if(!TPL){try{TPL=(await getKV('digitTpl'))||{};}catch(e){TPL={};}}return TPL;}
+  async function tplLoad(){if(!TPL){try{TPL=(await getKV('digitTpl2'))||{};}catch(e){TPL={};}}return TPL;}
   const tplSim=(g,t)=>{let both=0,any=0;for(let i=0;i<g.b.length;i++){const p=g.b[i]==='1',q=t.b[i]==='1';if(p&&q)both++;if(p||q)any++;}
     return (any?both/any:0)-Math.min(0.3,Math.abs(g.a-t.a)*0.8);};
-  function tplDigit(kind,g){const T=TPL?.[kind];if(!T)return null;let best=null,s1=-1,s2=-1;
+  // the HUD % digits, cut from Harry's real screens at several sizes (tools/build_pct_tpl.js) — a head start before this player's own
+  const BUILTIN_TPL={pct:{"0":[{"b":"001111000111111011100011110000111100001111000011110000111100001111000011110000110111111000111100","a":0.71},{"b":"001111000111111011000011110000111100001111000011110000111100001111000011110000110111111000111100","a":0.77},{"b":"001111100111111011111111110000111100001111000011110000111100001111000011111111110111111000111100","a":0.71},{"b":"001111000111111011111111110000111100001111000011110000111100001111000011110000110111111000111100","a":0.71},{"b":"001111000111111011111111110000111100001111000011110000111100001011000010110000100111111000111100","a":0.71},{"b":"011111101111111111000011110000111100001111000011110000111100001111000011110000111111111101111110","a":0.67},{"b":"001111000111111011110011110000111100001111000011110000111100001111000011111000110111111000111100","a":0.73},{"b":"011111001111111111000011110000111100001111000011110000111100001111000011110000111111111101111100","a":0.73}],"2":[{"b":"001111000111111011100011110000110000001100000110000011000001100000111000011100001111111111111111","a":0.71},{"b":"001111000111111011111111110000110000001100000110000011100001100000111000011100001111111111111111","a":0.71},{"b":"001111000111111011000011110000110000001100000110000011000001100000110000001000001111111111111111","a":0.71},{"b":"001111100011111011111111110000110000001100000110000011100001100000111000011101101111111111111111","a":0.71},{"b":"001111100011111011111111110000110000001100000110000011100001100000111000011000001111111111111110","a":0.71},{"b":"001111000111111011111111110000110000001100000110000011100001110000111000001100000111111101111111","a":0.77},{"b":"001111000111111011111111110000110000001100000110000011000001100000110000001100000111111001111110","a":0.74},{"b":"001111001111111011000111000001110000011100000110000011000001100000010000001100000111111011111111","a":0.82}],"3":[{"b":"001111000111111011100011110000110000001100011110000111100000001100000011110000110111111000111100","a":0.71},{"b":"001111100011111011111111110000110000001100011110000111100000001100000011111100110111111000111110","a":0.71},{"b":"001111000111111011110111110000110000001100011110000111100000001111000011110000110111111000111100","a":0.71},{"b":"001111000011111011111111110000110000001100011110000111100000001100000011110000110111111000111100","a":0.71},{"b":"001111000011111001111111110000110000001100001111000111100000011101000011111000110111111000111100","a":0.77},{"b":"001111000111111011100011010000110000001100001110000111100000001100000011110000110111111000111100","a":0.76},{"b":"001111000111111011000011000000110000001100011111000111100000111100000011110000110111111000111100","a":0.75},{"b":"001111000111111011110111110000110000001100001110000011100000001101000011011000110111111000111100","a":0.77}],"4":[{"b":"000001000000111000011110001111100011011001100110110011101111111101111111000001100000011000000100","a":0.71},{"b":"000001000000111000011110001111100111111011000110110011101111111111111110000011100000111000000100","a":0.69},{"b":"000001000000111000011110001111100010011011000110110011101111111111111110000011100000111000000100","a":0.71},{"b":"000001000000111000011110001111100011011011000110110001101111111111111111000001100000011000000110","a":0.64},{"b":"000001000000111000011110001111100011111011101110111011101111111101111110000011100000111000000100","a":0.74},{"b":"000001100000111000011110001111100110011011000110110001101111111101111111000001100000011000000100","a":0.68},{"b":"000001000000111000011110001111100011011011100110111011101111111111111111000001100000011000000110","a":0.71},{"b":"000001100000111000011110001111100111111011001110110011101111111111111111000011100000111000000110","a":0.71}],"5":[{"b":"011111111111111111100000110000001100000001111100001111100000001101000011110000110111111000111100","a":0.71},{"b":"111111111111111111000000110000001100000001111100001111100000001100000011110000110111111000111100","a":0.77},{"b":"011111101111111101111110010000000100000001111110001111100000001100000011011110110111111000111100","a":0.79},{"b":"111111111111111111101110110000001100000001111100001111100000001101000011110000110111111000111100","a":0.76},{"b":"111111101111111111111110110000001100000001111100001111100000001000000010110000100111111000111100","a":0.71},{"b":"111111111111111111101110110000001100000001111100001111100000001111000011111000110111111000111100","a":0.73},{"b":"111111111111111111000000110000001100000001111100001111100000001100000011110000110111111000111110","a":0.72},{"b":"111111111111111011000000110000001111100011111100001111100011111000000011110000111111111000111100","a":0.75}],"6":[{"b":"001111000111111011000011110000111100000011111100111111101100001111000011110000110111111000111100","a":0.71},{"b":"001111100011111001111111111000010110000001111100011111100110001101100011011000110111111100111110","a":0.71},{"b":"001111000111111011100111110000111100000011111100111111101110001111000011111000110111111000111100","a":0.74},{"b":"001111000111111011111111110000111100000011111100111111101100001011000010111111100111111000111100","a":0.79},{"b":"001111000011111011101111110000111100000011111100111111101100001111000011110000110111111000111100","a":0.72},{"b":"001111000011111011111111110000111100000011111100111111101110001111000011111000110111111000111100","a":0.73},{"b":"001111000111111011111111110000111100000011111100111111101100001111000011110000110111111000111110","a":0.53},{"b":"001111000111111011100011110000001100000011111100111111101110001111000011110000110111111000111100","a":0.75}],"8":[{"b":"001111000111111011100011110000111100001101111110011111101100001111000011110000110111111000111100","a":0.71},{"b":"001111000111111011000011110000111100001101111110011111101100001111000011110000110111111000111100","a":0.77},{"b":"001111100011111011111111110000111100001101111110001111101100001111000011110010110111111000111110","a":0.71},{"b":"001111000111111011101111110000111100001101111110011111101110001111000011111000110111111000111100","a":0.74},{"b":"001111000111111011111111110000111100001111111111011111101111111111000011110000110111111000111100","a":0.71},{"b":"011111101111111111000011110000111111111111111111011111101111111111000011110000111111111101111110","a":0.67},{"b":"011111101111111111000011110000111100001111111111011111101111111111000011110000111111111101111110","a":0.73},{"b":"001111000011111001100111110000111100001101111110011111100111111111000011110000110111111000111100","a":0.72}],"9":[{"b":"001111100011111011111111110000111100001101111111001111110000001100000011110000110111111000111100","a":0.71},{"b":"001111000111111011111111110000111100001101111111001111110000001100000011110000110011111100111110","a":0.64},{"b":"001111000111111011111111110000111100001101111111011111110000001100000011110000110111111000111100","a":0.7},{"b":"001111000111111011100111110000111110001101111111001111110000001100000011110000110111111000111100","a":0.72},{"b":"001111000111111001100111110000111110001101111111001111110000001100000011111000110111111000111100","a":0.74},{"b":"001111000011111001100011111000111110001101111111001111110000001100000011111000110111111000111100","a":0.74}]}};
+  function tplDigit(kind,g){const L=TPL?.[kind]||{},B=BUILTIN_TPL[kind]||{},T={};for(const d of new Set([...Object.keys(L),...Object.keys(B)]))T[d]=[...(L[d]||[]),...(B[d]||[])];
+    if(!Object.keys(T).length)return null;let best=null,s1=-1,s2=-1;
     for(const d of Object.keys(T)){let s=-1;for(const t of T[d])s=Math.max(s,tplSim(g,t));if(s>s1){s2=s1;s1=s;best=d;}else if(s>s2)s2=s;}
     return best!=null&&s1>=0.72&&s1-s2>=0.06?best:null;}
   // every glyph must be a clear digit; for Meso a frame edge at either end of the field may be skipped
@@ -1186,7 +1209,7 @@ const OCR=(()=>{
     return opts.length===1?opts[0]:null;}
   async function tplLearn(kind,gs,digits){if(!gs||gs.length!==digits.length)return;await tplLoad();const T=TPL[kind]=TPL[kind]||{};
     gs.forEach((g,i)=>{const d=digits[i];const L=T[d]=T[d]||[];if(L.some(t=>tplSim(g,t)>0.97))return;L.unshift(g);if(L.length>TPL_MAX)L.length=TPL_MAX;});
-    try{await put('kv',TPL,'digitTpl');}catch(e){}}
+    try{await put('kv',TPL,'digitTpl2');}catch(e){}}
   const tplCount=kind=>Object.keys(TPL?.[kind]||{}).length;
   // MapleStory always shows the % with 2 decimals; dots/commas are removed before reading, so restore the dot.
   // Read the LAST number before the bracket, so stray marks from an "EXP" label in the box are ignored.
@@ -1263,7 +1286,9 @@ const OCR=(()=>{
     for(const v of V.list){let text,val,struct=false;
       if(kind==='exp'&&v.pctOnly&&v.pct){let pc=null;
         // raw-line mode (psm 13): the single-line mode drops a leading "5" in this font; digits only
-        if(v.pctDigits){await w.setParameters(P_RAW);pMode='raw';const D=(await w.recognize(v.pctDigits)).data.text.replace(/[^\d]/g,'');await useParams(w,false);text=`[${D}]`;
+        const tp=v.pctDigits&&v.gPct?tplRead('pct',v.gPct):null;
+        if(tp&&tp.length===v.pctInt+2){pc=+(tp.slice(0,v.pctInt)+'.'+tp.slice(v.pctInt));struct=true;text=`[${tp}] (เทียบแม่แบบตัวเลข)`;}
+        else if(v.pctDigits){await w.setParameters(P_RAW);pMode='raw';const D=(await w.recognize(v.pctDigits)).data.text.replace(/[^\d]/g,'');await useParams(w,false);text=`[${D}]`;
           if(D.length===v.pctInt+2){pc=+(D.slice(0,v.pctInt)+'.'+D.slice(v.pctInt));struct=true;}}   // one digit per glyph, or nothing
         else{const b=(await w.recognize(v.pct)).data.text.trim(),m=b.match(/(\d{1,3})\.(\d{2})/);text=`[${b}]`;if(m)pc=+(m[1]+'.'+m[2]);}
         val=pc!=null&&pc<=100?{exp:null,pct:pc}:null;}
@@ -1477,14 +1502,21 @@ const OCR=(()=>{
   const printSim=(a,b)=>{if(!a||!b||Math.abs(a.aspect-b.aspect)/b.aspect>0.08)return 0;let both=0,any=0;
     for(let i=0;i<a.bits.length;i++){const p=a.bits[i]==='1',q=b.bits[i]==='1';if(p&&q)both++;if(p||q)any++;}return any?both/any:0;};
   async function rememberMap(mapId){if(!stream||!regions.map||!mapId)return;const p=titlePrint();if(!p)return;
-    const all=(await getKV('mapPrints'))||[];const keep=all.filter(x=>!(x.mapId===mapId&&printSim(x,p)>0.9));
+    const all=(await getKV('mapPrints'))||[];const keep=all.filter(x=>!(printSim(x,p)>0.9));   // also forgets the same picture filed under a wrong map
     keep.unshift({mapId,...p,t:Date.now()});await put('kv',keep.slice(0,300),'mapPrints');}
   async function readMap(maps){if(!stream||!regions.map||!video.videoWidth||isBlack())return null;
     const p=titlePrint(),prints=(await getKV('mapPrints'))||[];
     if(p&&prints.length){let best=null,bs=0,second=0;
       for(const x of prints){const sc=printSim(p,x);if(sc>bs){if(best?.mapId!==x.mapId)second=bs;bs=sc;best=x;}else if(x.mapId!==best?.mapId&&sc>second)second=sc;}
       const m=best&&(maps||[]).find(mm=>String(mm.id)===String(best.mapId));
-      if(m&&bs>=0.86&&bs-second>=0.06)return {map:m,raw:`จำภาพชื่อแมพได้ (ตรงกัน ${Math.round(bs*100)}%)`,byPicture:true,cands:[]};}
+      if(m&&bs>=0.86&&bs-second>=0.06){
+        // "Camp 1" and "Camp 2" look alike as pictures: the text still has the last word — if it clearly names another map, it wins
+        const w=await ensure(),texts=await readWords(w,'map'),tm=matchMap(texts,maps||[]);
+        // only when the text says it cleanly ("Camp 1" as whole words) — "Ant Tunnel (I" is too unsure to overrule "Ant Tunnel II"
+        const says=nm=>{const re=new RegExp('(?:^|\\s)'+nm.trim().split(/\s+/).map(w=>w.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')).join('\\s+')+'(?=\\s|$|\\|)','i');return texts.some(t=>re.test(t.replace(/\s+/g,' ')));};
+        if(tm&&String(tm.id)!==String(m.id)&&says(tm.name)&&!says(m.name)){await put('kv',prints.filter(x=>!(String(x.mapId)===String(m.id)&&printSim(p,x)>0.86)),'mapPrints');
+          return {map:tm,cands:[],raw:texts.map(t=>t.replace(/\s+/g,' ').trim()).join(' | ')+' (ตัวหนังสือไม่ตรงกับภาพที่จำไว้ — ใช้ตัวหนังสือ)'};}
+        return {map:m,raw:`จำภาพชื่อแมพได้ (ตรงกัน ${Math.round(bs*100)}%)`,byPicture:true,cands:[]};}}
     const w=await ensure();
     const texts=await readWords(w,'map');const map=matchMap(texts,maps||[]);
     return {map,cands:map?[]:lastRank,raw:texts.map(t=>t.replace(/\s+/g,' ').trim()).join(' | ')};}
@@ -1600,7 +1632,7 @@ const OCR=(()=>{
     if(!stream||!video.videoWidth||isBlack())return null;const out={};
     if(force){auto.src={};auto.anchor=null;AFC.anchor=null;}
     const hu=findHud();
-    if(hu){auto.hud={P:hu.P,W:hu.W,H:hu.H};for(const k of ['who','exp'])if(isAuto(k)||!regions[k]){const b=hudBox(hu,k);if(b){regions[k]=b;auto.src[k]='auto';out[k]=true;}}}
+    if(hu){auto.hud={P:hu.P,W:hu.W,H:hu.H,Rs:hu.Rs,Bs:hu.Bs,y:hu.y};for(const k of ['who','exp'])if(isAuto(k)||!regions[k]){const b=hudBox(hu,k);if(b){regions[k]=b;auto.src[k]='auto';out[k]=true;}}}
     if(isAuto('map')||!regions.map){const m=locateMap(hu);if(m){regions.map=m;auto.src.map='auto';out.map=true;}}
     if(isAuto('meso')||!regions.meso){const m=locateMeso(hu);if(m){regions.meso=m;auto.src.meso='auto';out.meso=true;mesoOff=false;st.mesoHidden=null;}}
     if(Object.keys(out).length){await put('kv',regions,'ocrRegions');await put('kv',{w:video.videoWidth,h:video.videoHeight},'ocrRegionsSize');st.q.relocate++;}
@@ -1618,8 +1650,43 @@ const OCR=(()=>{
       else{const m=(regions.meso&&mesoVisible())?regions.meso:locateMeso(auto.hud);if(!m)return;
         if(m!==regions.meso){regions.meso=m;await put('kv',regions,'ocrRegions');drawBoxes();st.q.relocate++;}}
       mesoOff=false;const t=Date.now(),w=await ensure(),r=await readRegion(w,'meso');const v=r?.best?.val??null;
-      st.mesoHidden=null;if(v!=null&&acceptMeso(v,t,!!r.byTpl||r.agree>=2)){st.errMeso=0;render();}
+      st.mesoHidden=null;if(v!=null&&acceptMeso(v,t,r.agree>=2)){st.errMeso=0;render();}
     }catch(e){}finally{busy=false;}}
+  /* ---- game chat: the box right above the HUD, read line by line ----
+     Each line is cut with its OWN text colour (taken from the "[hh:mm]" it starts with) and, as a second try, a plain
+     light/dark split; the read with more letters and fewer stray marks wins. Lines without a time stamp are not chat. */
+  let chatW=null;
+  async function chatWorker(){if(chatW)return chatW;await ensure();const opts={};['workerPath','corePath'].forEach(k=>{if(CFG[k])opts[k]=CFG[k];});if(CFG.chatLangPath)opts.langPath=CFG.chatLangPath;
+    chatW=await Tesseract.createWorker(['eng','kor'],1,opts);await chatW.setParameters({tessedit_pageseg_mode:'7'});return chatW;}
+  const CHAT_RE=/\[?\s*(\d{1,2})\s*[:;.]?\s*(\d{2})\s*[\]|1lI]\s*(.+)$/;
+  function maskLine(src,mode,zw){const W=src.width,H=src.height,n=W*H,id=new ImageData(new Uint8ClampedArray(src.data),W,H),d=id.data;
+    if(mode==='otsu'){const L=new Uint8Array(n);for(let i=0;i<n;i++)L[i]=d[i*4]*.299+d[i*4+1]*.587+d[i*4+2]*.114;const hist=new Array(256).fill(0);for(const v of L)hist[v]++;
+      let sum=0;for(let i=0;i<256;i++)sum+=i*hist[i];let sB=0,wB=0,best=0,th=128;
+      for(let t=0;t<256;t++){wB+=hist[t];if(!wB)continue;const wF=n-wB;if(!wF)break;sB+=t*hist[t];const mB=sB/wB,mF=(sum-sB)/wF,v=wB*wF*(mB-mF)*(mB-mF);if(v>best){best=v;th=t;}}
+      let hi=0;for(const v of L)if(v>th)hi++;const tb=hi<n/2;for(let i=0;i<n;i++){const on=tb?L[i]>th:L[i]<=th;d[i*4]=d[i*4+1]=d[i*4+2]=on?0:255;}}
+    else{const pts=[];for(let y=0;y<H;y++)for(let x=0;x<zw;x++){const i=(y*W+x)*4;pts.push([d[i],d[i+1],d[i+2]]);}
+      const med=[0,1,2].map(k=>pts.map(q=>q[k]).sort((a,b)=>a-b)[pts.length>>1]),dist=(a,b)=>Math.hypot(a[0]-b[0],a[1]-b[1],a[2]-b[2]);
+      const far=pts.map(q=>[dist(q,med),q]).sort((a,b)=>b[0]-a[0]).slice(0,Math.max(5,pts.length*0.08|0)).map(x=>x[1]),tc=[0,1,2].map(k=>far.reduce((a,q)=>a+q[k],0)/far.length);
+      for(let i=0;i<n;i++){const q=[d[i*4],d[i*4+1],d[i*4+2]],dt=dist(q,tc);const on=dt<70&&dt<dist(q,med)*0.7;d[i*4]=d[i*4+1]=d[i*4+2]=on?0:255;}}
+    return id;}
+  // Tesseract spaces out Hangul syllables ("사 람 채 널"): join runs of single syllables back into words
+  const fixKo=t=>t.replace(/(?:^|\s)((?:[가-힣]\s){2,}[가-힣])(?=\s|$)/g,m=>' '+m.replace(/\s+/g,'')).trim();
+  async function readChat(){
+    if(!stream||!video.videoWidth||isBlack())return {err:'ยังไม่ได้แชร์จอเกม'};
+    let hu=auto.hud&&auto.hud.W===video.videoWidth&&auto.hud.Rs!=null?auto.hud:null;if(!hu){const h=findHud();if(h)hu=auto.hud={P:h.P,W:h.W,H:h.H,Rs:h.Rs,Bs:h.Bs,y:h.y};}
+    if(!hu)return {err:'หาแถบ HP/MP ด้านล่างไม่เจอ — ให้เห็นหน้าต่างเกมทั้งหมด'};
+    const w=await chatWorker(),P=hu.P,x=Math.max(0,hu.Rs-2.0*P),wd=Math.min(video.videoWidth-x,5.05*P),lh=0.148*P,S=3,lines=[];let miss=0;
+    for(let k=0;k<8&&miss<2;k++){const y=hu.y-0.6*P-k*lh-lh/2;if(y<0)break;
+      const c=document.createElement('canvas');c.width=Math.round(wd*S);c.height=Math.round(lh*S);const g=c.getContext('2d',{willReadFrequently:true});g.imageSmoothingQuality='high';g.drawImage(video,x,y,wd,lh,0,0,c.width,c.height);
+      const src=g.getImageData(0,0,c.width,c.height),reads=[];
+      for(const mode of ['color','otsu']){g.putImageData(maskLine(src,mode,Math.round(0.42*P*S)),0,0);const t=(await w.recognize(c)).data.text.replace(/\s+/g,' ').trim();
+        const good=(t.match(/[가-힣A-Za-z0-9]/g)||[]).length,junk=(t.match(/[|=_~—\\{}<>]/g)||[]).length,m=t.match(CHAT_RE);reads.push({t,m,sc:good-3*junk+(m?15:0)});}
+      reads.sort((a,b)=>b.sc-a.sc);const r=reads[0];if(!r.m){miss++;continue;}miss=0;
+      const rest=r.m[3],ci=rest.indexOf(':');let name=ci>0?rest.slice(0,ci):'',msg=ci>0?rest.slice(ci+1):rest;
+      if(ci<=0){const nm=rest.match(/^([A-Za-z0-9_]{2,13})\s*[\[{(]?\s*[)\]}]?\s*[:;3|]?\s+(.*)$/);if(nm){name=nm[1];msg=nm[2];}}   // the ":" was misread
+      name=name.replace(/\b(?:CH|cH|Ch)\s*\d*\b.*$/,'').replace(/[^A-Za-z0-9가-힣_()\s]/g,'').replace(/\(\)\s*$/,'').trim();msg=fixKo(msg.replace(/^[\s:;|]+|[\s|]+$/g,''));
+      if(msg)lines.unshift({time:`${r.m[1].padStart(2,'0')}:${r.m[2]}`,name,msg});}
+    return {lines};}
   /* ---- accept/reject + accumulate ----
      One misread must never poison the totals:
      • a number is only used after the median of its last 3 reads (one odd read is outvoted)
@@ -1673,8 +1740,10 @@ const OCR=(()=>{
     if(Math.abs(val-s.from)<=tol*2&&s.to-s.from>tol){steps.splice(k,1);return s;}return null;}
   function smooth(win,val){win.push(val);if(win.length>3)win.shift();return win.length<3?null:med(win);}
   function rebaseIfStuck(rej,val,t,tol,apply){ // 3 rejected reads that agree with each other = the old baseline was wrong
-    rej.push({val,t});if(rej.length>3)rej.shift();
-    if(rej.length===3&&rej.every((r,i)=>!i||(r.val>=rej[i-1].val-tol&&r.val-rej[i-1].val<=tol*4))){apply(rej[2].val);rej.length=0;return true;}
+    rej.push({val,t});if(rej.length>5)rej.shift();
+    const fit=(a,b)=>b.val>=a.val-tol&&b.val-a.val<=tol*4;let ch=[rej[rej.length-1]];   // walk back from the newest read
+    for(let i=rej.length-2;i>=0&&ch.length<3;i--)if(fit(rej[i],ch[0]))ch.unshift(rej[i]);
+    if(ch.length>=3){apply(ch[ch.length-1].val);rej.length=0;return true;}
     return false;
   }
   /* Gains are the NET difference from the starting point (current − start, plus levels finished on the way),
@@ -1838,7 +1907,7 @@ const OCR=(()=>{
       const t=Date.now(),r=await readNow(st.level??levelHint);st.black=r.black;
       if(regions.who&&!r.black&&(st.cycle%4===1)){try{const who=await readWho(typeof characters!=='undefined'?characters:[]);
         if(who?.level&&(st.level==null||(who.level>=st.level&&who.level<=st.level+1))&&who.level!==st.level)setLevel(who.level,'who');}catch(e){}}
-      const okE=regions.exp&&!r.black&&acceptExp(r.exp,t),okM=regions.meso&&!mesoOff&&!r.black&&acceptMeso(r.meso,t,!!r.mesoSure||/แม่แบบ/.test(r.rawMeso));
+      const okE=regions.exp&&!r.black&&acceptExp(r.exp,t),okM=regions.meso&&!mesoOff&&!r.black&&acceptMeso(r.meso,t,!!r.mesoSure);
       {const q=st.q;q.reads++;                                                     // read quality — kept with the session, not shown
         if(regions.exp&&!r.black){if(r.exp?.est)q.expEst++;if(/แม่แบบ/.test(r.rawExp))q.expTpl++;okE?q.expOk++:(r.exp?q.expRej++:q.expNone++);}
         if(regions.meso&&!r.black){if(mesoOff)q.mesoHiddenReads++;else{if(/แม่แบบ/.test(r.rawMeso))q.mesoTpl++;okM?q.mesoOk++:(r.meso!=null?q.mesoRej++:q.mesoNone++);}}}
@@ -1946,7 +2015,9 @@ const OCR=(()=>{
   }
   function restart(){const was=!!timer;reset(true);   // ↺ keeps the level: the EXP table check needs it from the first read
 renderLog();render();$('ocrHint').textContent='↺ เริ่มนับใหม่แล้ว — ตัวเลขจะขึ้นอีกครั้งในไม่กี่วินาที';if(was)start();else if(stream)readOnce();}
-  return {init,live,setTicker,readNow,seed,restart,rememberMap,checkBoxes,learnMeso:async v=>{if(!stream||!regions.meso||v==null)return;const r=await readNow();if(!r.listMeso)return;const dm=String(v);for(const x of r.listMeso){const g=alignGlyphs(x.gAll,dm.length);if(g)await tplLearn('meso',g,dm);}},_tpl:()=>TPL,_tplLearn:tplLearn,_levelCanvases:()=>levelCanvases(regions.who).map(c=>c.toDataURL()),_fromPct:v=>fromPct(v),_titlePrint:titlePrint,_printSim:printSim,_variants:k=>{const V=variants(regions[k]);return V?V.list.map(v=>({tag:v.tag,count:v.count,modeH:v.modeH,img:v.canvas.toDataURL()})):null;},hasRegions:()=>!!(regions.exp||regions.meso),hasAny:()=>Object.values(regions).some(Boolean),has:k=>!!regions[k],readWho,readMap,_readNow:readNow,reset:()=>{reset();render();},snapshot:()=>({expGained:st.expGained,mesoCollected:st.mesoCollected,t0:st.t0,quality:{...st.q,mesoEst:st.q.mesoEst.slice(-20),rateHr:Math.round(expRate()||0),mesoExtra:Math.round(mesoExtra()),auto:{...auto.src}}}),autoFind,autoText,setMap,_findHud:findHud,_locateMeso:()=>locateMeso(auto.hud),_mesoVisible:mesoVisible,_auto:()=>auto,_mesoExtra:mesoExtra,_seek:seekMeso,_learnAnchor:learnMesoAnchor,_mesoOff:()=>mesoOff,_setMesoOff:v=>{mesoOff=!!v;st.mesoHidden=v?Date.now():null;},_setRegion:(k,v)=>{regions[k]=v;},_live:()=>live(),_relevel:relevel,autofill,_learnLevel:learnLevel,_readLevelDigits:async()=>readLevelDigits(await ensure()),learnLevel,_variants:k=>variants(regions[k]),_readRegion:async k=>readRegion(await ensure(),k),_render:()=>render(),stop,drawBoxes,_parseExp:parseExp,_parseMeso:parseMeso,_st:st,_accExp:acceptExp,_reqNow:reqNow,_accMeso:acceptMeso,_repairExp:v=>repairExp(v),_fitLevels:fitLevels,_setHint:h=>{levelHint=h;}};
+  return {init,live,setTicker,readNow,seed,restart,rememberMap,checkBoxes,learnPct:async v=>{if(!stream||!regions.exp||v==null)return;await tplLoad();const V=variants(regions.exp);if(!V)return;const ds=String(Math.round(v*100)).padStart(3,'0');
+    for(const x of V.list){if(x.pctOnly&&x.gPct&&x.pctInt!=null&&x.gPct.length===ds.length&&x.pctInt===ds.length-2)await tplLearn('pct',x.gPct,ds);}},
+  learnMeso:async v=>{if(!stream||!regions.meso||v==null)return;const r=await readNow();if(!r.listMeso)return;const dm=String(v);for(const x of r.listMeso){const g=alignGlyphs(x.gAll,dm.length);if(g)await tplLearn('meso',g,dm);}},_tpl:()=>TPL,_tplLearn:tplLearn,_levelCanvases:()=>levelCanvases(regions.who).map(c=>c.toDataURL()),_fromPct:v=>fromPct(v),_titlePrint:titlePrint,_printSim:printSim,_variants:k=>{const V=variants(regions[k]);return V?V.list.map(v=>({tag:v.tag,count:v.count,modeH:v.modeH,img:v.canvas.toDataURL()})):null;},hasRegions:()=>!!(regions.exp||regions.meso),hasAny:()=>Object.values(regions).some(Boolean),has:k=>!!regions[k],readWho,readMap,_readNow:readNow,reset:()=>{reset();render();},snapshot:()=>({expGained:st.expGained,mesoCollected:st.mesoCollected,t0:st.t0,quality:{...st.q,mesoEst:st.q.mesoEst.slice(-20),rateHr:Math.round(expRate()||0),mesoExtra:Math.round(mesoExtra()),auto:{...auto.src}}}),autoFind,autoText,setMap,_findHud:findHud,_locateMeso:()=>locateMeso(auto.hud),_mesoVisible:mesoVisible,_auto:()=>auto,_mesoExtra:mesoExtra,_seek:seekMeso,_learnAnchor:learnMesoAnchor,_mesoOff:()=>mesoOff,_setMesoOff:v=>{mesoOff=!!v;st.mesoHidden=v?Date.now():null;},_setRegion:(k,v)=>{regions[k]=v;},_live:()=>live(),readChat,_variantsOf:r=>variants(r),_tplSim:(a,b)=>tplSim(a,b),_relevel:relevel,autofill,_learnLevel:learnLevel,_readLevelDigits:async()=>readLevelDigits(await ensure()),learnLevel,_variants:k=>variants(regions[k]),_readRegion:async k=>readRegion(await ensure(),k),_render:()=>render(),stop,drawBoxes,_parseExp:parseExp,_parseMeso:parseMeso,_st:st,_accExp:acceptExp,_reqNow:reqNow,_accMeso:acceptMeso,_repairExp:v=>repairExp(v),_fitLevels:fitLevels,_setHint:h=>{levelHint=h;}};
 })();
 
 // two taps within 3 s → start counting again from what is on screen now (regions are kept)
@@ -2133,7 +2204,8 @@ async function startSession(){
     mapId=(await addCustomMap(n,$('s_newMapArea').value,$('s_newMapId').value.trim())).id;}
   try{await OCR.rememberMap(mapId);}catch(e){}
   try{await OCR.setMap(mapId);}catch(e){}            // the player confirmed this map: remember how its title looks
-  try{const mz=num($('s_mesos').value);if(mz!=null)await OCR.learnMeso(mz);}catch(e){}   // …and the Meso digits, from the value the player confirmed
+  try{const mz=num($('s_mesos').value);if(mz!=null&&$('s_mesos').dataset.auto==='0')await OCR.learnMeso(mz);}catch(e){}   // Meso digits: only from a value the player typed/confirmed
+  try{const pz=num($('s_pct').value);if(pz!=null&&$('s_pct').dataset.auto==='0')await OCR.learnPct(pz);}catch(e){}       // …and the % digits the same way
   const st={level:num($('s_level').value),exp:num($('s_exp').value),pct:num($('s_pct').value),mesos:num($('s_mesos').value)};
   if(st.exp==null)st.exp=expAt(st);                                 // above 1M only the % shows: table × %
   if(st.level==null||st.exp==null||st.mesos==null){alert('กรอกอย่างน้อย เลเวล, EXP (หรือ %) และเงิน ก่อนเริ่มการผจญภัยนะคะ');return;}
@@ -2496,6 +2568,30 @@ function buildEnd(){
   const s={...active,items,end:e,endTime:Date.now()};s.prices=snapshotPrices(s);
   return {s,e,items};
 }
+/* ===================== chat translation (on-device, Chrome) ===================== */
+const CHAT={seen:new Map(),tr:{},det:null,timer:null,busy:false};
+const within=(pr,ms)=>Promise.race([pr,new Promise((_,rej)=>setTimeout(()=>rej(new Error('timeout')),ms))]);   // a model download that never starts must not hang the panel
+const chatLang=t=>/[가-힣]/.test(t)?'ko':/[\u3040-\u30ff]/.test(t)?'ja':/[\u4e00-\u9fff]/.test(t)?'zh':'en';
+async function chatTranslate(text){
+  let src=chatLang(text);
+  if(src==='en'&&'LanguageDetector' in self){try{CHAT.det=CHAT.det||await within(LanguageDetector.create(),8000);const r=(await within(CHAT.det.detect(text),4000))[0];if(r&&r.confidence>0.6)src=r.detectedLanguage;}catch(e){}}
+  if(/^zh-Latn|^und/.test(src))return {src,th:null,note:'น่าจะเป็นภาษาจีนพิมพ์แบบอ่านออกเสียง — ยังแปลไม่ได้'};
+  src=src.split('-')[0];if(src==='th')return {src,th:text};
+  if(!('Translator' in self))return {src,th:null,note:'เบราว์เซอร์นี้ยังแปลไม่ได้ — ใช้ Chrome รุ่นใหม่'};
+  try{if(!CHAT.tr[src]){const av=await within(Translator.availability({sourceLanguage:src,targetLanguage:'th'}),5000);if(av==='unavailable')return {src,th:null,note:`แปล ${src} → ไทย ไม่ได้ในเครื่องนี้`};
+      CHAT.tr[src]=await within(Translator.create({sourceLanguage:src,targetLanguage:'th',monitor(m){m.addEventListener('downloadprogress',e=>{$('chatNote').textContent=`กำลังโหลดตัวแปล ${src} → ไทย ${Math.round((e.loaded||0)*100)}% (ครั้งแรกครั้งเดียว)`;});}}),120000);}
+    return {src,th:await within(CHAT.tr[src].translate(text),10000)};}catch(e){return {src,th:null,note:'แปลไม่สำเร็จ: '+(e.message||e)};}}
+async function chatRun(){if(CHAT.busy)return;CHAT.busy=true;const note=$('chatNote');
+  try{note.textContent='กำลังอ่านช่องแชท…';const r=await OCR.readChat();if(r.err){note.textContent='⚠️ '+r.err;return;}
+    if(!r.lines.length){note.textContent='ไม่เจอข้อความในช่องแชท — ช่องแชทต้องอยู่ที่เดิมเหนือแถบ HP/MP';return;}
+    let added=0;for(const l of r.lines){const key=l.time+'|'+l.name+'|'+l.msg;if(CHAT.seen.has(key))continue;const t=await chatTranslate(l.msg);CHAT.seen.set(key,{...l,...t});added++;}
+    while(CHAT.seen.size>40)CHAT.seen.delete(CHAT.seen.keys().next().value);
+    $('chatList').innerHTML=[...CHAT.seen.values()].map(m=>`<li><span class="muted small">${esc(m.time)}</span> <span class="who">${esc(m.name||'?')}</span> <span class="muted small">${esc(m.src||'')}</span>
+      <div class="th">${m.th!=null?esc(m.th):`<span class="muted">${esc(m.note||'')}</span>`}</div>${m.th!==m.msg?`<div class="orig">${esc(m.msg)}</div>`:''}</li>`).join('');
+    $('chatList').scrollTop=1e9;note.textContent=`อ่านได้ ${r.lines.length} บรรทัด${added?` · ใหม่ ${added}`:''} · ${new Date().toLocaleTimeString('th-TH')}`;}
+  catch(e){note.textContent='⚠️ '+(e.message||e);}finally{CHAT.busy=false;}}
+$('chatGo')?.addEventListener('click',chatRun);
+$('chatAuto')?.addEventListener('change',e=>{clearInterval(CHAT.timer);CHAT.timer=e.target.checked?setInterval(chatRun,10000):null;if(e.target.checked)chatRun();});
 function showQuit(on){const a=$('quitArea'),b=$('quitBar');if(!a||!b)return;a.hidden=!on;b.hidden=on;
   if(on){EW.goKey('review');a.scrollIntoView({behavior:'smooth',block:'start'});}}
 $('btnQuit')?.addEventListener('click',()=>showQuit(true));
