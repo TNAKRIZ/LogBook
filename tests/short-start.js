@@ -1,5 +1,5 @@
 // A returning player (character + map already known): start = screen → start values → review (3 steps);
-// no potions taken → the end skips the potions step.
+// quitting goes straight to the summary (end values from the reader), potions/drops/ETC optional from there.
 const {chromium}=require('playwright');
 (async()=>{const b=await chromium.launch();const p=await b.newPage();const errs=[];p.on('pageerror',e=>errs.push(e.message));
 await p.goto('http://localhost:8123/index.html');await p.waitForTimeout(900);
@@ -14,6 +14,6 @@ const r=await p.evaluate(async()=>{
 const ok1=JSON.stringify(r.seen)===JSON.stringify(['1จอเกม','2ค่าตอนเริ่ม','3ตรวจทาน']),ok2=r.bar.length===3;
 await p.click('#btnStart');await p.waitForTimeout(400);await p.click('#btnQuit');
 const end=await p.evaluate(()=>{const cur=()=>document.querySelector('#ew_steps li.on')?.textContent;$('e_level').value=69;$('e_pct').value=57;$('e_mesos').value=140000;$('ew_next').click();return {now:cur(),bar:[...document.querySelectorAll('#ew_steps li')].map(li=>li.textContent)};});
-const ok3=end.now==='2ของดรอป'&&!end.bar.some(t=>t.includes('ยา'));
-console.log(JSON.stringify(r),JSON.stringify(end));console.log('start in 3 steps',ok1&&ok2,'| end skips potions',ok3,'| ERR',errs);
+const ok3=/สรุป/.test(end.now)&&!end.bar.some(t=>t.includes('ยา')||t.includes('ดรอป'));
+console.log(JSON.stringify(r),JSON.stringify(end));console.log('start in 3 steps',ok1&&ok2,'| end goes straight to the summary',ok3,'| ERR',errs);
 await b.close();process.exit(ok1&&ok2&&ok3&&!errs.length?0:1);})();

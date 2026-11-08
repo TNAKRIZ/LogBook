@@ -239,9 +239,6 @@ footer a{color:inherit}
   <div class="brand"><h1 class="sr">LogBook บันทึกนักผจญภัย</h1><div class="hero"><img class="book" id="logoBook" alt="" aria-hidden="true"><img class="wordmark" id="logoWord" alt="LogBook บันทึกนักผจญภัย"></div><p class="slogan">Log your journey, share your glory.</p></div><div class="headbar"><div class="jobrow" id="jobRow" aria-hidden="true"></div>
   <nav id="tabs">
     <button data-t="session" class="on">เริ่มบันทึกการผจญภัย</button>
-    <button data-t="history">ประวัติ</button>
-    <button data-t="summary">สรุป</button>
-    <button data-t="settings">ตั้งค่า</button>
     <button id="themeBtn" type="button">🌗 ตามเครื่อง</button>
   </nav></div>
 </header></div>
@@ -411,9 +408,9 @@ footer a{color:inherit}
   </div>
 
   <!-- ===== while farming ===== -->
+  <div class="card mt" id="resultCard" hidden></div>
   <div id="activeArea" style="display:none">
     <!-- while farming only this bar shows; the checkpoint and the end-of-session steps open when the player is done -->
-    <div class="card mt stale" id="staleNote" hidden></div>
     <div class="card mt quitbar" id="quitBar">
       <div><b>เล่นเสร็จแล้ว?</b><div class="muted small">กดเมื่อจะเลิกเล่น แล้วค่อยจดค่าตอนจบ ยา ของดรอป</div></div>
       <button type="button" class="btn" id="btnQuit">⏹️ เลิกเล่น / จบรอบ</button>
@@ -473,7 +470,7 @@ footer a{color:inherit}
         <button type="button" class="btn ghost sm" id="btnCancel">ยกเลิกรอบนี้</button>
         <span class="werr" id="ew_err"></span>
         <button type="button" class="btn" id="ew_next">Next →</button>
-        <button type="button" class="btn go" id="btnEnd">💾 จบรอบและบันทึก</button>
+        <button type="button" class="btn go" id="btnEnd">✅ จบรอบ</button>
       </div>
     </div>
     <div class="row" style="margin-top:10px"><button type="button" class="btn ghost sm" id="btnResume">↩ ยังไม่จบ — กลับไปเล่นต่อ</button></div>
@@ -482,69 +479,6 @@ footer a{color:inherit}
 </section>
 
 <!-- ================= HISTORY ================= -->
-<section id="t-history" style="display:none"><div id="historyList"></div></section>
-
-<!-- ================= SUMMARY ================= -->
-<section id="t-summary" style="display:none">
-  <div class="card">
-    <h2>📅 รายวัน</h2>
-    <div class="bars" id="dailyBars"></div>
-    <p class="muted small" style="margin:4px 0 10px">กราฟ: EXP ที่ได้ต่อวัน</p>
-    <div class="tablewrap"><table id="dailyTable"></table></div>
-  </div>
-  <div class="card">
-    <h2>👤 ตัวละคร (เฉลี่ยต่อชั่วโมง)</h2>
-    <div class="tablewrap"><table id="charTable"></table></div>
-  </div>
-  <div class="card">
-    <h2>🗺️ เทียบแมพ (เฉลี่ยต่อชั่วโมง)</h2>
-    <p class="muted small" style="margin-top:0">แยกตามสายอาชีพและจำนวนคนในปาร์ตี้ เพราะ EXP ถูกหารกัน · กำไร = Meso จากการฟาร์ม − ต้นทุนยา · มูลค่าของ = ยาที่เพิ่มขึ้น (ราคาตั้งร้านขายเอง) + ของดรอป (ยังไม่ขาย ไม่รวมในกำไร)</p>
-    <div class="tablewrap"><table id="mapTable"></table></div>
-  </div>
-  <div class="card">
-    <h2>🧪 การใช้ยาต่อชั่วโมง</h2>
-    <div class="tablewrap"><table id="potionTable"></table></div>
-  </div>
-  <div class="card">
-    <h2>💎 อัตราดรอปจริงที่บันทึกได้</h2>
-    <div class="tablewrap"><table id="dropTable"></table></div>
-  </div>
-</section>
-
-<!-- ================= SETTINGS ================= -->
-<section id="t-settings" style="display:none">
-  <div class="card">
-    <h2><img class="coinico" data-coin="bag" alt=""> ราคาไอเทมร้าน NPC</h2>
-    <p class="muted small" style="margin-top:0"><b>ราคาร้าน</b> = ราคาซื้อจาก NPC ตามเกม (ล็อกไว้ แก้ไม่ได้) ใช้คิดต้นทุนยาที่ใช้ไป · <b>ราคาตั้งร้านขายเอง</b> = ราคาที่ตั้งขายเองใน Free Market ใช้คิดมูลค่ายาที่เพิ่มขึ้น · ★ = ต้องมีระดับชื่อเสียงของเมืองก่อนถึงจะซื้อได้</p>
-    <div class="tablewrap"><table id="priceTable"></table></div>
-    <div class="row" style="margin-top:10px"><button class="btn" id="btnSavePrices">บันทึกราคา</button></div>
-  </div>
-  <div class="card">
-    <h2>🏷️ ของขายเอง</h2>
-    <p class="muted small" style="margin-top:0">ของดรอปที่เคยบันทึกในรอบที่ผ่านมา ตั้งราคาขายเองไว้ครั้งเดียว รอบต่อไปจะใส่ราคานี้ให้อัตโนมัติ (ไม่รวมอุปกรณ์สวมใส่)</p>
-    <div class="tablewrap"><table id="sellTable"></table></div>
-    <div class="row" style="margin-top:10px"><button class="btn" id="btnSaveSell">บันทึกราคา</button></div>
-  </div>
-  <div class="card">
-    <h2>👤 โปรไฟล์ตัวละคร</h2>
-    <p class="muted small" style="margin-top:0">สร้างตัวละครใหม่ได้ตอนเริ่มการผจญภัย · แก้ชื่อ อาชีพ หรือสาย 2 ได้ที่นี่ (รอบที่บันทึกไปแล้วจะเก็บชื่อและสาย ณ ตอนที่เล่น)</p>
-    <div class="tablewrap"><table id="charSetTable"></table></div>
-    <div class="row" style="margin-top:10px"><button class="btn" id="btnSaveChars">บันทึกโปรไฟล์</button></div>
-  </div>
-  <div class="card">
-    <h2>🗺️ แมพที่เพิ่มเอง</h2>
-    <div class="tablewrap"><table id="customMapTable"></table></div>
-  </div>
-  <div class="card">
-    <h2>🗂️ สำรองและรวมข้อมูล</h2>
-    <p class="muted small" style="margin-top:0">ข้อมูลเก็บในเบราว์เซอร์เครื่องนี้ ควรส่งออกสำรองไว้บ้าง · คนรับจ้างเล่นบนคอมอีกเครื่อง ให้ส่งไฟล์ .json มา แล้วกดนำเข้าเพื่อรวมข้อมูล</p>
-    <div class="row">
-      <button class="btn ghost" id="btnExport">ส่งออก (.json รวมรูป)</button>
-      <button class="btn ghost" id="btnCsv">ส่งออกตาราง (.csv)</button>
-      <label class="btn ghost" style="display:inline-block;margin:0;cursor:pointer">นำเข้า .json<input type="file" id="fileImport" accept=".json" style="display:none"></label>
-    </div>
-  </div>
-</section>
 </main>
 <footer>
   ข้อมูลแมพ มอนสเตอร์ รายการดรอป ราคาร้าน NPC และรูปไอเทมอ้างอิงจาก <a href="https://meowdb.com/msclassic" target="_blank" rel="noopener">NiaMeowDB (meowdb.com)</a> · อัตราดรอปอ้างอิงเป็นข้อมูลจาก OSMLib อาจไม่ตรงกับ Classic World · ชื่อเกมและไอเทมเป็นของ Nexon
@@ -1909,7 +1843,6 @@ const OCR=(()=>{
         if(regions.exp&&!r.black){if(r.exp?.est)q.expEst++;if(/แม่แบบ/.test(r.rawExp))q.expTpl++;okE?q.expOk++:(r.exp?q.expRej++:q.expNone++);}
         if(regions.meso&&!r.black){if(mesoOff)q.mesoHiddenReads++;else{if(/แม่แบบ/.test(r.rawMeso))q.mesoTpl++;okM?q.mesoOk++:(r.meso!=null?q.mesoRej++:q.mesoNone++);}}}
       if(okM&&!auto.anchor)learnMesoAnchor();
-      if(okE)document.dispatchEvent(new Event('lb-gain'));
       if(okE&&r.exp&&!r.exp.est&&r.expSure&&r.expLevel!=null&&r.expLevel===(st.levelAtExp??st.level)&&st.level===r.expLevel&&st.cycle%20===1&&regions.who)learnLevel(r.expLevel).catch(()=>{});   // proven: keep its LV shapes
       if(okE&&r.exp&&!r.exp.est&&r.expSure&&r.expLevel!=null&&r.expLevel!==(st.levelAtExp??st.level)){
         st.lvProof=st.lvProof?.L===r.expLevel?{L:r.expLevel,n:st.lvProof.n+1}:{L:r.expLevel,n:1};
@@ -2269,23 +2202,31 @@ async function endSession(){
   const r=buildEnd();if(r.err){alert(r.err);return;}
   if(stream)await saveShot('end','จบรอบ');
   const {s,e,items}=r;s.endTime=Date.now();
-  await put('sessions',s);await del('kv','active');
+  for(const x of await shotsFor(s.id))await del('shots',x.id);
   const ch=charOf(s.charId);
   if(ch){ch.last={mapId:s.mapId,party:s.party,level:e.level,exp:e.exp,pct:e.pct,mesos:e.mesos,
     items:Object.fromEntries(Object.entries(items).map(([id,v])=>[id,v.end])),at:s.endTime};await saveChars();}
   active=null;clearInterval(autoTimer);
   ['e_exp','e_pct','e_mesos','e_note'].forEach(i=>$(i).value='');['e_deaths','e_charm'].forEach(i=>$(i).value='0');
-  fillCharSelect($('s_char'),s.charId);prefillFromChar(ch);renderStartItems();showActive();renderHistory();renderSummary();
-  const c=calc(s);
-  alert(`บันทึกแล้ว ✅\nEXP: ${fmt(c.exp)} (${fmtK(c.expHr)}/ชม.)\nกำไร: ${fmt(c.profit)} mesos (${fmtK(c.profitHr)}/ชม.)\nมูลค่าของที่ได้ (ยังไม่ขาย): ${fmt(c.itemValue)}`);
+  fillCharSelect($('s_char'),s.charId);prefillFromChar(ch);renderStartItems();showActive();
+  showResult(s);
 }
+/* the finished session: shown once, not kept — EXP/hr, Meso/hr and the picture to share */
+let lastResult=null;
+function showResult(s){lastResult=s;const c=calc(s),el=$('resultCard');if(!el)return;
+  el.innerHTML=`<h2>🏁 สรุปรอบนี้</h2>
+    <div class="grid">${stat('เวลาเล่น',dur(s.endTime-s.startTime))}${stat('EXP ที่ได้',fmt(c.exp))}${stat('EXP/ชม.',fmtK(c.expHr))}
+      ${stat('เงินที่ได้',fmt(c.farmMesos))}${stat('Meso/ชม.',fmtK(c.hours?c.farmMesos/c.hours:null))}${c.potionCost?stat('กำไรหลังหักค่ายา',fmt(c.profit)):''}</div>
+    <div class="row" style="margin-top:12px"><button type="button" class="btn" id="resShare">📸 ทำรูปสรุปไว้แชร์</button><button type="button" class="btn ghost" id="resClose">เริ่มรอบใหม่</button></div>
+    <p class="muted small" style="margin:8px 0 0">ผลรอบนี้ไม่ถูกเก็บไว้ — ถ้าอยากเก็บ ทำรูปสรุปแล้วบันทึกลงเครื่องได้เลย</p>`;
+  el.hidden=false;$('resShare').onclick=()=>openShare(s);$('resClose').onclick=()=>{el.hidden=true;};el.scrollIntoView({behavior:'smooth',block:'start'});}
 async function cancelSession(){
   if(!active||!confirm('ยกเลิกรอบนี้? ข้อมูลและรูปของรอบนี้จะถูกลบ'))return;
   for(const s of await shotsFor(active.id))await del('shots',s.id);
   await del('kv','active');active=null;clearInterval(autoTimer);showActive();
 }
 function showActive(){
-  $('startCard').style.display=active?'none':'';$('activeArea').style.display=active?'':'none';if(!active)showQuit(false);checkStale();$('liveGrid').style.display=active?'':'none';
+  $('startCard').style.display=active?'none':'';$('activeArea').style.display=active?'':'none';if(!active)showQuit(false);$('liveGrid').style.display=active?'':'none';
   if(active)EW.reset();else{whoSeen=null;mapSeen=null;$('whoNote').innerHTML='';$('mapNote').innerHTML='';$('detectAll').innerHTML='';SW.reset();}mountBlocks();
   clearInterval(tickTimer);if(active)tickTimer=setInterval(renderLive,30000);renderLive();
 }
@@ -2551,32 +2492,21 @@ function buildEnd(){
   const items=structuredClone(active.items);const missing=[];
   $('e_items').querySelectorAll('tr[data-id]').forEach(tr=>{const v=items[tr.dataset.id];v.bought=num(tr.querySelector('.ib').value)||0;
     v.end=num(tr.querySelector('.ie').value);if(v.end==null)missing.push(itemOf(tr.dataset.id)?.name);});
-  if(missing.length)return {err:'ใส่จำนวนที่เหลือของ: '+missing.join(', ')};
+  // potions are optional: one left empty is simply not counted (no cost, no profit line for it)
   const s={...active,items,end:e,endTime:Date.now()};s.prices=snapshotPrices(s);
   return {s,e,items};
 }
-/* a session left open for hours (page closed, PC slept, a different file opened) would count all that time:
-   ask whether to finish it, drop it, or carry on */
-const STALE_MS=6*3.6e6;let staleOk=false,lastSeenSave=0;
-document.addEventListener('lb-gain',()=>{if(!active)return;const now=Date.now();if(now-lastSeenSave<60000)return;lastSeenSave=now;active.lastT=now;put('kv',active,'active').catch(()=>{});});
-function checkStale(){const el=$('staleNote');if(!el)return;const last=active&&(active.lastT||active.startTime),gap=last?Date.now()-last:0;
-  if(!active||staleOk||gap<STALE_MS){el.hidden=true;return;}
-  el.hidden=false;el.innerHTML=`<b>⚠️ รอบนี้ค้างมาตั้งแต่ ${dayKey(active.startTime)} ${timeStr(active.startTime)}</b> <span class="muted">(ไม่ได้อ่าน EXP มา ${dur(gap)})</span>
-    <div class="muted small">เวลาที่ค้างไว้จะถูกนับเป็นเวลาเล่น ทำให้สถิติรอบนี้เพี้ยน · ${esc(active.mapName||'')}</div>
-    <div class="row"><button type="button" class="btn sm" id="staleEnd">⏹️ จบรอบเก่า</button><button type="button" class="btn ghost sm" id="staleDrop">🗑 ยกเลิกรอบเก่า</button><button type="button" class="btn ghost sm" id="staleKeep">▶️ เล่นรอบนี้ต่อ</button></div>`;
-  $('staleEnd').onclick=()=>{staleOk=true;el.hidden=true;showQuit(true);};
-  $('staleDrop').onclick=()=>$('btnCancel').click();
-  $('staleKeep').onclick=()=>{staleOk=true;el.hidden=true;};}
 function showQuit(on){const a=$('quitArea'),b=$('quitBar');if(!a||!b)return;a.hidden=!on;b.hidden=on;
-  if(on){a.scrollIntoView({behavior:'smooth',block:'start'});}}
+  if(on){EW.goKey('review');a.scrollIntoView({behavior:'smooth',block:'start'});}}
 $('btnQuit')?.addEventListener('click',()=>showQuit(true));
 $('btnResume')?.addEventListener('click',()=>{showQuit(false);$('liveCard')?.scrollIntoView({behavior:'smooth',block:'start'});});
+const EW_valuesMissing=()=>expAt({exp:num($('e_exp').value),pct:num($('e_pct').value),level:num($('e_level').value)})==null||num($('e_mesos').value)==null;
 const EW=makeWizard({root:'endCard',steps:'ew_steps',back:'ew_back',next:'ew_next',finish:'btnEnd',err:'ew_err',
-  skip:k=>k==='potions'&&!(active?.items?.length),
+  // straight to the summary once the end values are known; potions, drops and ETC are optional ("แก้ไข" in the summary)
+  skip:k=>k==='potions'||k==='drops'||k==='etc'||(k==='values'&&!EW_valuesMissing()),
   labels:['ค่าตอนจบ','ยา','ของดรอป','ETC','สรุป'],
   validate:{
     values(){if(expAt({exp:num($('e_exp').value),pct:num($('e_pct').value),level:num($('e_level').value)})==null||num($('e_mesos').value)==null)return 'กรอก EXP (หรือ % กับเลเวล) และเงิน ตอนจบรอบด้วยนะคะ';},
-    potions(){const miss=[];$('e_items').querySelectorAll('tr[data-id]').forEach(tr=>{if(num(tr.querySelector('.ie').value)==null)miss.push(itemOf(tr.dataset.id)?.name);});if(miss.length)return 'ใส่จำนวนที่เหลือของ: '+miss.join(', ');}
   },
   enter:{values:()=>{if(stream&&OCR.hasRegions())ocrConfirm('e');},review:()=>renderEndReview()}});
 function renderEndReview(){
@@ -2587,9 +2517,10 @@ function renderEndReview(){
    <div class="review">
     ${row('เวลาเล่น',dur(r.s.endTime-r.s.startTime))}
     ${row('EXP',`${fmt(c.exp)} · ${fmtK(c.expHr)}/ชม. · Lv.${esc(r.s.start.level)} → ${esc(r.e.level??r.s.start.level)}`,'values')}
-    ${row('กำไร (Meso)',`${fmt(c.profit)} <span class="muted small">(เงินจากฟาร์ม ${fmt(c.farmMesos)} − ค่ายา ${fmt(c.potionCost)})</span>`,'potions')}
-    ${row('ของดรอป',r.e.drops.length?r.e.drops.map(d=>`<span class="chip iname">${ico(d.id,16)}${esc(d.name)} ×${d.qty}</span>`).join(' '):'ไม่มี','drops')}
-    ${row('ETC',r.e.etc.length?r.e.etc.map(d=>`<span class="chip iname">${ico(d.id,16)}${esc(d.name)} ×${d.qty}</span>`).join(' '):'ไม่มี','etc')}
+    ${row('Meso',`${fmt(c.farmMesos)} · ${fmtK(c.hours&&c.farmMesos!=null?c.farmMesos/c.hours:null)}/ชม.`,'values')}
+    ${Object.keys(r.s.items||{}).length?row('ยา',c.potionCost?`ค่ายา ${fmt(c.potionCost)} · กำไรหลังหักค่ายา ${fmt(c.profit)}`:'<span class="muted">ไม่ได้ใส่ที่เหลือ (ไม่บังคับ)</span>','potions'):''}
+    ${row('ของดรอป',r.e.drops.length?r.e.drops.map(d=>`<span class="chip iname">${ico(d.id,16)}${esc(d.name)} ×${d.qty}</span>`).join(' '):'<span class="muted">ไม่ได้ใส่ (ไม่บังคับ)</span>','drops')}
+    ${row('ETC',r.e.etc.length?r.e.etc.map(d=>`<span class="chip iname">${ico(d.id,16)}${esc(d.name)} ×${d.qty}</span>`).join(' '):'<span class="muted">ไม่ได้ใส่ (ไม่บังคับ)</span>','etc')}
     ${row('มูลค่าของที่ได้',`${fmt(c.itemValue)} <span class="muted small">(ยังไม่ขาย · ไม่รวมในกำไร)</span>`)}
     ${row('ตาย / Charm',`${fmt(r.e.deaths)} / ${fmt(r.e.charm)}`,'values')}
    </div>`;
@@ -2622,93 +2553,6 @@ function sessionDetail(s){
   <h3>📸 ภาพหน้าจอ</h3><div class="shots" data-shots="${esc(s.id)}"><span class="muted small">กำลังโหลด…</span></div>
   <div class="row" style="margin-top:12px"><button class="btn" data-share="${esc(s.id)}">📸 สร้างรูปสรุป</button><button class="btn ghost" data-edit="${esc(s.id)}">✏️ แก้ไขรอบ</button><button class="btn danger" data-del="${esc(s.id)}">ลบรอบนี้</button></div>`;
 }
-async function renderHistory(){
-  const ss=(await getAll('sessions')).sort((a,b)=>b.startTime-a.startTime);
-  if(!ss.length){$('historyList').innerHTML=`<div class="card">${emptyMsg('ยังไม่มีรอบที่บันทึกเลย ไปฟาร์มกันสักรอบ แล้วกลับมาดูผลตรงนี้นะ')}</div>`;return;}
-  $('historyList').innerHTML=ss.map(s=>{const c=calc(s);
-    return `<details class="sess" data-id="${esc(s.id)}"><summary>${dayKey(s.startTime)} · ${timeStr(s.startTime)}–${s.endTime?timeStr(s.endTime):'?'} · ${esc(s.mapName)}${s.party>1?' (ปาร์ตี้ '+s.party+')':''} · ${esc(s.charName||'ไม่ระบุตัวละคร')} —<span class="good">${fmtK(c.expHr)} EXP/ชม.</span> · <span class="${signCls(c.profitHr)}">${fmtK(c.profitHr)} กำไร/ชม.</span></summary><div class="body"></div></details>`;}).join('');
-}
-$('historyList').addEventListener('toggle',async e=>{
-  const d=e.target;if(!d.matches('details.sess')||!d.open)return;
-  const s=(await getAll('sessions')).find(x=>x.id===d.dataset.id);if(!s)return;
-  d.querySelector('.body').innerHTML=sessionDetail(s);
-  const shots=(await shotsFor(s.id)).sort((a,b)=>a.time-b.time);
-  d.querySelector('[data-shots]').innerHTML=shots.length?shots.map(x=>`<div class="shot"><img src="${x.data}" loading="lazy" alt=""><span>${esc(x.label)} ${dayKey(x.time).slice(5)} ${timeStr(x.time)}</span></div>`).join(''):'<span class="muted small">ไม่มีภาพ</span>';
-},true);
-$('historyList').addEventListener('click',async e=>{
-  const delId=e.target.dataset?.del,editId=e.target.dataset?.edit,shareId=e.target.dataset?.share;
-  if(editId){openEdit(editId);return;}
-  if(shareId){openShare(shareId);return;}
-  if(!delId||!confirm('ลบรอบนี้และรูปทั้งหมด?'))return;
-  for(const s of await shotsFor(delId))await del('shots',s.id);
-  await del('sessions',delId);renderHistory();renderSummary();
-});
-
-/* ===================== edit session ===================== */
-async function openEdit(id){
-  const s=(await getAll('sessions')).find(x=>x.id===id);if(!s)return;
-  const M=$('modal');
-  const itemIds=new Set(Object.keys(s.items||{}));
-  const consumables=[...allItems().values()].filter(i=>i.cat!=='drop');
-  M.innerHTML=`<div class="card"><h2>✏️ แก้ไขรอบ ${dayKey(s.startTime)} ${timeStr(s.startTime)}</h2>
-    <div class="fields">
-      <div><label>ตัวละคร</label><select id="x_char"></select></div>
-      <div style="grid-column:span 2"><label>แมพ</label><select id="x_map"></select></div>
-      <div><label>คนในปาร์ตี้</label><input id="x_party" type="number" min="1" max="6" value="${s.party||1}"></div>
-      <div><label>เวลาเริ่ม</label><input id="x_t0" type="datetime-local" value="${toLocalInput(s.startTime)}"></div>
-      <div><label>เวลาจบ</label><input id="x_t1" type="datetime-local" value="${s.endTime?toLocalInput(s.endTime):''}"></div>
-    </div>
-    <div class="split" style="margin-top:12px">
-      <div class="box"><h4>ตอนเริ่ม</h4><div class="fields">
-        <div><label>เลเวล</label><input id="x_sl" type="number" value="${s.start.level??''}"></div><div><label>EXP</label><input id="x_se" type="number" value="${s.start.exp??''}"></div>
-        <div><label>EXP %</label><input id="x_sp" type="number" step="0.01" value="${s.start.pct??''}"></div><div><label>เงิน</label><input id="x_sm" type="number" value="${s.start.mesos??''}"></div></div></div>
-      <div class="box"><h4>ตอนจบ</h4><div class="fields">
-        <div><label>เลเวล</label><input id="x_el" type="number" value="${s.end?.level??''}"></div><div><label>EXP</label><input id="x_ee" type="number" value="${s.end?.exp??''}"></div>
-        <div><label>EXP %</label><input id="x_ep" type="number" step="0.01" value="${s.end?.pct??''}"></div><div><label>เงิน</label><input id="x_em" type="number" value="${s.end?.mesos??''}"></div>
-        <div><label>ตาย</label><input id="x_d" type="number" value="${s.end?.deaths||0}"></div><div><label>Safety Charm</label><input id="x_c" type="number" value="${s.end?.charm||0}"></div></div></div>
-    </div>
-    <h3>🧪 ยา</h3>
-    <div class="tablewrap"><table id="x_items"><tr><th>ยา</th><th>เริ่ม</th><th>ซื้อเพิ่ม</th><th>เหลือ</th><th class="num">ราคาร้าน</th><th>ราคาตั้งร้านขายเอง</th><th></th></tr>
-      ${[...itemIds].map(iid=>itemEditRow(iid,s.items[iid],priceFor(s,iid))).join('')}</table></div>
-    <div class="row" style="margin-top:8px"><select id="x_addItem" style="max-width:280px"><option value="">+ เพิ่มยาในรอบนี้…</option>${consumables.filter(i=>!itemIds.has(i.id)).map(i=>`<option value="${esc(i.id)}">${esc(i.name)}</option>`).join('')}</select></div>
-    <h3>💎 ของดรอป</h3><div id="x_drops"></div>
-    <h3>🧺 ETC</h3><div id="x_etc"></div>
-    <div class="fields" style="margin-top:10px"><div style="grid-column:1/-1"><label>โน้ตตอนเริ่ม</label><input id="x_n0" value="${esc(s.startNote||'')}"></div><div style="grid-column:1/-1"><label>โน้ตตอนจบ</label><input id="x_n1" value="${esc(s.end?.note||'')}"></div></div>
-    <div class="row" style="margin-top:14px"><button class="btn" id="x_save">บันทึกการแก้ไข</button><button class="btn ghost" id="x_close">ปิด</button></div></div>`;
-  fillMapSelect($('x_map'),s.mapId,false);
-  fillCharSelect($('x_char'),s.charId,false);if(!s.charId)$('x_char').value='';
-  renderDropPicker($('x_drops'),s.mapId,s.end?.drops||[]);renderDropPicker($('x_etc'),s.mapId,s.end?.etc||[],'etc');
-  $('x_map').onchange=()=>{renderDropPicker($('x_drops'),$('x_map').value,readDrops($('x_drops')));renderDropPicker($('x_etc'),$('x_map').value,readDrops($('x_etc')),'etc');};
-  $('x_addItem').onchange=e=>{const iid=e.target.value;if(!iid)return;const it=itemOf(iid);
-    $('x_items').insertAdjacentHTML('beforeend',itemEditRow(iid,{start:'',bought:0,end:''},{shop:it.shop||0,market:it.market||0}));
-    e.target.querySelector(`option[value="${CSS.escape(iid)}"]`).remove();e.target.value='';};
-  $('x_items').onclick=e=>{if(e.target.dataset.rm!=null)e.target.closest('tr').remove();};
-  $('x_close').onclick=()=>{M.style.display='none';};
-  $('x_save').onclick=async()=>{
-    const mid=$('x_map').value;if(!mid){alert('เลือกแมพก่อนนะคะ');return;}
-    const t0=new Date($('x_t0').value).getTime(),t1=$('x_t1').value?new Date($('x_t1').value).getTime():null;
-    if(!isFinite(t0)||(t1!=null&&t1<=t0)){alert('เวลาไม่ถูกต้อง');return;}
-    const items={},prices={};
-    $('x_items').querySelectorAll('tr[data-id]').forEach(tr=>{const iid=tr.dataset.id;
-      items[iid]={start:num(tr.querySelector('.xs').value),bought:num(tr.querySelector('.xb').value)||0,end:num(tr.querySelector('.xe').value)};
-      prices[iid]={shop:num(tr.querySelector('.xps').value)||0,market:num(tr.querySelector('.xpm').value)||0};});
-    const xc=charOf($('x_char').value);
-    const charPart=xc?(xc.id===s.charId?{}:{charId:xc.id,charName:xc.name,job:xc.job,branch:xc.branch}):{charId:null,charName:'',job:null,branch:null};
-    const ns={...s,...charPart,mapId:mid,mapName:mapOf(mid)?.name||s.mapName,party:Math.max(1,num($('x_party').value)||1),
-      startTime:t0,endTime:t1,items,prices,startNote:$('x_n0').value.trim(),
-      start:{level:num($('x_sl').value),exp:num($('x_se').value),pct:num($('x_sp').value),mesos:num($('x_sm').value)},
-      end:{...(s.end||{}),level:num($('x_el').value),exp:num($('x_ee').value),pct:num($('x_ep').value),mesos:num($('x_em').value),
-        deaths:num($('x_d').value)||0,charm:num($('x_c').value)||0,drops:readDrops($('x_drops')),etc:readDrops($('x_etc')),note:$('x_n1').value.trim()},
-      editedAt:Date.now()};
-    await put('sessions',ns);M.style.display='none';renderHistory();renderSummary();
-  };
-  M.style.display='block';M.scrollTop=0;
-}
-function itemEditRow(id,v,p){const it=itemOf(id);
-  return `<tr data-id="${esc(id)}"><td>${iname(id,it?.name||id)}</td>
-  <td><input class="xs" type="number" value="${v.start??''}" style="width:90px"></td><td><input class="xb" type="number" value="${v.bought||0}" style="width:90px"></td><td><input class="xe" type="number" value="${v.end??''}" style="width:90px"></td>
-  <td class="num">${fmt(p.shop||0)}<input class="xps" type="hidden" value="${p.shop||0}"></td><td><input class="xpm" type="number" value="${p.market||0}" style="width:90px"></td><td><button type="button" class="btn ghost sm" data-rm>✕</button></td></tr>`;}
-
 /* ===================== share card (canvas → PNG) ===================== */
 const TIERS=[
   {min:100000,name:'ว่าที่สุลต่าน',coin:'gold',color:'#b8860b'},
@@ -2789,8 +2633,8 @@ async function renderShareCard(s){
   g.fillStyle='#8a6c50';g.font=`500 15px ${TH}`;g.textAlign='right';g.fillText('MapleStory Classic · LogBook',W-36,884);g.textAlign='left';
   return cv;
 }
-async function openShare(id){
-  const s=(await getAll('sessions')).find(x=>x.id===id);if(!s||!s.end)return;
+async function openShare(s){
+  if(!s||!s.end)return;
   const cv=await renderShareCard(s);cv.id='shareCanvas';
   const M=$('modal');
   M.innerHTML=`<div class="card"><h2>📸 รูปสรุปการฟาร์ม</h2><div id="shareWrap"></div>
@@ -2805,149 +2649,9 @@ async function openShare(id){
   M.style.display='block';M.scrollTop=0;
 }
 
-/* ===================== summary ===================== */
-async function renderSummary(){
-  const ss=(await getAll('sessions')).filter(s=>s.end).sort((a,b)=>a.startTime-b.startTime);
-  const days={},maps={},pot={},drops={},mapHours={},chars={};
-  for(const s of ss){const c=calc(s),k=dayKey(s.startTime);
-    const d=days[k]||(days[k]={h:0,exp:0,profit:0,value:0,n:0});d.h+=c.hours;d.exp+=c.exp||0;d.profit+=c.profit||0;d.value+=c.itemValue;d.n++;
-    const ck=s.charId||'none';
-    const ch=chars[ck]||(chars[ck]={name:s.charName||'ไม่ระบุตัวละคร',job:s.job,gender:s.gender,branch:s.branch,h:0,exp:0,profit:0,value:0,deaths:0,n:0});
-    ch.h+=c.hours;ch.exp+=c.exp||0;ch.profit+=c.profit||0;ch.value+=c.itemValue;ch.deaths+=c.deaths;ch.n++;
-    if(s.charId&&charOf(s.charId)){const cur=charOf(s.charId);ch.name=cur.name;ch.job=cur.job;ch.gender=cur.gender;ch.branch=cur.branch;}
-    const cls=classLabel(s.job,s.branch);
-    const mk=s.mapId+'|'+(s.party||1)+'|'+cls;
-    const m=maps[mk]||(maps[mk]={name:s.mapName,party:s.party||1,cls,job:s.job,h:0,exp:0,profit:0,cost:0,value:0,deaths:0,charm:0,n:0});
-    m.h+=c.hours;m.exp+=c.exp||0;m.profit+=c.profit||0;m.cost+=c.potionCost;m.value+=c.itemValue;m.deaths+=c.deaths;m.charm+=c.charm;m.n++;
-    mapHours[s.mapId]=(mapHours[s.mapId]||0)+c.hours;
-    for(const p of c.potions){const pk=s.mapId+'|'+p.id;const x=pot[pk]||(pot[pk]={map:s.mapName,mapId:s.mapId,id:p.id,name:p.name,cat:p.cat,used:0,gained:0});x.used+=p.used;x.gained+=p.gained;}
-    for(const dr of s.end.drops||[]){const dk=s.mapId+'|'+dr.id;const x=drops[dk]||(drops[dk]={map:s.mapName,mapId:s.mapId,id:dr.id,name:dr.name,qty:0});x.qty+=dr.qty;}
-  }
-  const dk=Object.keys(days),maxE=Math.max(1,...dk.map(k=>days[k].exp));
-  $('dailyBars').innerHTML=dk.length?dk.slice(-30).map(k=>`<div class="bar" title="${k}: ${fmt(days[k].exp)} EXP"><div style="height:${days[k].exp/maxE*100}%"></div><small>${k.slice(5)}</small></div>`).join(''):'<span class="muted">ยังไม่มีข้อมูล</span>';
-  $('dailyTable').innerHTML='<tr><th>วันที่</th><th class="num">รอบ</th><th class="num">ชั่วโมง</th><th class="num">EXP</th><th class="num">EXP/ชม.</th><th class="num">กำไร</th><th class="num">มูลค่าของ</th></tr>'+
-    (dk.length?dk.slice().reverse().map(k=>{const d=days[k];return `<tr><td>${k}</td><td class="num">${d.n}</td><td class="num">${d.h.toFixed(1)}</td><td class="num">${fmt(d.exp)}</td><td class="num">${fmtK(d.exp/d.h)}</td><td class="num ${signCls(d.profit)}">${fmt(d.profit)}</td><td class="num">${fmt(d.value)}</td></tr>`;}).join(''):'<tr><td colspan="7" class="muted">ยังไม่มีข้อมูล</td></tr>');
-  const mv=Object.values(maps).sort((a,b)=>b.h-a.h);
-  const cv=Object.values(chars).sort((a,b)=>b.h-a.h);
-  $('charTable').innerHTML='<tr><th>ตัวละคร</th><th>สาย</th><th class="num">รอบ</th><th class="num">ชั่วโมง</th><th class="num">EXP/ชม.</th><th class="num">กำไร/ชม.</th><th class="num">มูลค่าของ/ชม.</th><th class="num">ตาย</th></tr>'+
-    (cv.length?cv.map(c=>`<tr><td><span class="iname">${jobSprite(c.job,22,false,c.gender)}${esc(c.name)}</span></td><td>${esc(classLabel(c.job,c.branch))}</td><td class="num">${c.n}</td><td class="num">${c.h.toFixed(1)}</td><td class="num">${fmtK(c.exp/c.h)}</td><td class="num ${signCls(c.profit)}">${fmtK(c.profit/c.h)}</td><td class="num">${fmtK(c.value/c.h)}</td><td class="num">${c.deaths}</td></tr>`).join(''):'<tr><td colspan="8" class="muted">ยังไม่มีข้อมูล</td></tr>');
-  $('mapTable').innerHTML='<tr><th>แมพ</th><th>สาย</th><th>ปาร์ตี้</th><th class="num">ชั่วโมง</th><th class="num">EXP/ชม.</th><th class="num">กำไร/ชม.</th><th class="num">ต้นทุนยา/ชม.</th><th class="num">มูลค่าของ/ชม.</th><th class="num">ตาย (Charm)</th></tr>'+
-    (mv.length?mv.map(m=>`<tr><td>${esc(m.name)}</td><td><span class="iname">${jobSprite(m.job,18)}${esc(m.cls)}</span></td><td>${m.party>1?m.party+' คน':'คนเดียว'}</td><td class="num">${m.h.toFixed(1)}</td><td class="num">${fmtK(m.exp/m.h)}</td><td class="num ${signCls(m.profit)}">${fmtK(m.profit/m.h)}</td><td class="num">${fmtK(m.cost/m.h)}</td><td class="num">${fmtK(m.value/m.h)}</td><td class="num">${m.deaths}${m.charm?' ('+m.charm+')':''}</td></tr>`).join(''):'<tr><td colspan="9" class="muted">ยังไม่มีข้อมูล</td></tr>');
-  const pv=Object.values(pot);
-  $('potionTable').innerHTML='<tr><th>แมพ</th><th>ยา</th><th class="num">ใช้/ชม.</th><th class="num">ได้เพิ่ม/ชม.</th></tr>'+
-    (pv.length?pv.map(p=>{const h=mapHours[p.mapId]||1;return `<tr><td>${esc(p.map)}</td><td>${iname(p.id,p.name)}</td><td class="num">${p.used?(p.used/h).toFixed(1):''}</td><td class="num">${p.gained?(p.gained/h).toFixed(1):''}</td></tr>`;}).join(''):'<tr><td colspan="4" class="muted">ยังไม่มีข้อมูล</td></tr>');
-  const dv=Object.values(drops);
-  $('dropTable').innerHTML='<tr><th>แมพ</th><th>ของ</th><th class="num">ได้ทั้งหมด</th><th class="num">ได้ 1 ชิ้นทุก</th></tr>'+
-    (dv.length?dv.map(d=>`<tr><td>${esc(d.map)}</td><td>${iname(d.id,d.name)}</td><td class="num">${d.qty}</td><td class="num">${((mapHours[d.mapId]||0)/d.qty).toFixed(1)} ชม.</td></tr>`).join(''):'<tr><td colspan="4" class="muted">ยังไม่มีของดรอปที่บันทึก</td></tr>');
-}
-
-/* ===================== settings ===================== */
-function renderSettings(){
-  const all=[...allItems().values()];
-  const shopItems=all.filter(i=>CAT_GROUPS.some(([c])=>c===i.cat));
-  $('priceTable').innerHTML='<tr><th>ไอเทม</th><th class="num">ราคาร้าน</th><th>ราคาตั้งร้านขายเอง</th><th></th></tr>'+CAT_GROUPS.map(([c,label])=>{
-    const list=shopItems.filter(i=>i.cat===c).sort((x,y)=>(x.shop??1e9)-(y.shop??1e9)||x.name.localeCompare(y.name));
-    if(!list.length)return '';
-    return `<tr class="grp"><td colspan="4">${label}</td></tr>`+list.map(i=>`<tr data-id="${esc(i.id)}"><td>${iname(i.id,i.name)}${i.rep?' <span class="tag rep" title="ต้องมีระดับชื่อเสียงของเมือง">★ '+esc(i.rep)+'</span>':''}${i.info?'<br><span class="muted small">'+esc(i.info)+'</span>':''}</td>
-    <td class="num">${i.shop!=null?fmt(i.shop):'<span class="muted">–</span>'}</td>
-    <td><input class="pm" type="number" min="0" value="${i.market||''}" placeholder="ยังไม่ตั้ง" style="width:110px"></td>
-    <td>${i.custom?`<button class="btn ghost sm" data-rmitem="${esc(i.id)}">ลบ</button>`:''}</td></tr>`).join('');}).join('');
-  renderSellTable();
-  $('charSetTable').innerHTML=characters.length?'<tr><th></th><th>ชื่อตัวละคร</th><th>อาชีพ</th><th>สาย 2</th><th></th></tr>'+characters.map(c=>`<tr data-id="${esc(c.id)}"><td>${jobSprite(c.job,26,false,c.gender)}</td>
-    <td><input class="cn" value="${esc(c.name)}" style="width:160px"></td>
-    <td><select class="cj">${JOBS.map(j=>`<option value="${j.id}" ${j.id===c.job?'selected':''}>${j.name}</option>`).join('')}</select></td>
-    <td><select class="cb">${branchOptions(c.job,c.branch)}</select></td>
-    <td><button class="btn ghost sm" data-rmchar="${esc(c.id)}">ลบ</button></td></tr>`).join(''):'<tr><td class="muted">ยังไม่มี — สร้างได้ตอนเริ่มการผจญภัย</td></tr>';
-  $('customMapTable').innerHTML=customMaps.length?'<tr><th>ชื่อแมพ</th><th>พื้นที่</th><th>รหัส</th><th></th></tr>'+customMaps.map(m=>`<tr><td>${esc(m.name)}</td><td>${esc(m.area)}</td><td>${m.id.startsWith('c-')?'<span class="muted">ยังไม่รู้</span>':esc(m.id)}</td><td><button class="btn ghost sm" data-rmmap="${esc(m.id)}">ลบ</button></td></tr>`).join(''):'<tr><td class="muted">ยังไม่มี — เพิ่มได้ตอนเริ่มการผจญภัย โดยเลือก "แมพอื่น"</td></tr>';
-  refreshDatalist();
-}
-function branchOptions(job,sel){const br=jobOf(job)?.branches||[];
-  return br.length?'<option value="">ยังไม่เปลี่ยนสาย</option>'+br.map(b=>`<option ${b===sel?'selected':''}>${esc(b)}</option>`).join(''):'<option value="">—</option>';}
-$('charSetTable').addEventListener('change',e=>{if(e.target.classList.contains('cj')){const tr=e.target.closest('tr');tr.querySelector('.cb').innerHTML=branchOptions(e.target.value,null);}});
-$('charSetTable').addEventListener('click',async e=>{const id=e.target.dataset?.rmchar;if(!id)return;
-  const n=(await getAll('sessions')).filter(s=>s.charId===id).length;
-  if(!confirm(n?`ตัวละครนี้มี ${n} รอบที่บันทึกไว้ รอบเหล่านั้นจะยังอยู่แต่เป็น "ไม่ระบุตัวละคร" — ลบโปรไฟล์?`:'ลบโปรไฟล์ตัวละครนี้?'))return;
-  characters=characters.filter(c=>c.id!==id);await saveChars();
-  for(const s of await getAll('sessions'))if(s.charId===id)await put('sessions',{...s,charId:null});
-  renderSettings();fillCharSelect($('s_char'));onCharChange();renderHistory();renderSummary();});
-$('btnSaveChars').onclick=async()=>{
-  const rows=[...$('charSetTable').querySelectorAll('tr[data-id]')];
-  for(const tr of rows){const c=charOf(tr.dataset.id);const name=tr.querySelector('.cn').value.trim();if(!name){alert('ชื่อตัวละครห้ามว่าง');return;}
-    if(characters.some(o=>o.id!==c.id&&norm(o.name)===norm(name))){alert('ชื่อซ้ำ: '+name);return;}}
-  for(const tr of rows){const c=charOf(tr.dataset.id);c.name=tr.querySelector('.cn').value.trim();c.job=tr.querySelector('.cj').value;c.branch=tr.querySelector('.cb').value||null;}
-  await saveChars();renderSettings();const keep=$('s_char').value;fillCharSelect($('s_char'),keep);onCharChange();renderSummary();alert('บันทึกโปรไฟล์แล้ว');
-};
 function refreshDatalist(){$('allItems').innerHTML=[...allItems().values()].map(i=>`<option value="${esc(i.name)}">`).join('');}
-// Items the player sells themselves: non-equipment drops that appeared in a recorded session (plus any already priced).
-async function sellItemIds(){
-  const ids=new Set();
-  for(const s of await getAll('sessions'))for(const d of [...(s.end?.drops||[]),...(s.end?.etc||[])])ids.add(d.id);
-  for(const id of Object.keys(priceOverrides))ids.add(id);
-  return [...ids].filter(id=>{const it=itemOf(id);return it&&(it.cat==='drop'||it.cat==='etc')&&!isEquip(id);});
-}
-const isEquip=id=>/^1\d{6}$/.test(id);
-async function renderSellTable(){
-  const list=(await sellItemIds()).map(itemOf).sort((a,b)=>a.name.localeCompare(b.name));
-  $('sellTable').innerHTML=list.length?'<tr><th>ไอเทม</th><th class="num">ขาย NPC</th><th>ราคาตั้งร้านขายเอง</th></tr>'+list.map(i=>`<tr data-id="${esc(i.id)}"><td>${iname(i.id,i.name)}</td>
-    <td class="num">${i.cat==='etc'&&i.npc!=null?fmt(i.npc):'<span class="muted">–</span>'}</td>
-    <td><input class="pm" type="number" min="0" value="${i.cat==='etc'&&i.market===i.npc?'':(i.market||'')}" placeholder="ยังไม่ตั้ง" style="width:110px"></td></tr>`).join('')
-    :'<tr><td class="muted">ยังไม่มี — ของดรอปที่บันทึกตอนจบรอบจะมาแสดงที่นี่</td></tr>';
-}
-async function savePrices(){
-  $('priceTable').querySelectorAll('tr[data-id]').forEach(tr=>{const v=num(tr.querySelector('.pm').value);const id=tr.dataset.id;
-    const keep=priceOverrides[id]?.shop!=null&&itemOf(id)?.custom?{shop:priceOverrides[id].shop}:{};
-    if(v!=null)priceOverrides[id]={...keep,market:v};else if(keep.shop!=null)priceOverrides[id]=keep;else delete priceOverrides[id];});
-  await put('kv',priceOverrides,'priceOverrides');renderSettings();renderStartItems();alert('บันทึกราคาแล้ว (รอบที่บันทึกไปแล้วใช้ราคา ณ วันที่เล่น แก้ได้ในปุ่มแก้ไขรอบ)');
-}
-$('priceTable').addEventListener('click',async e=>{const id=e.target.dataset?.rmitem;if(!id||!confirm('ลบไอเทมนี้?'))return;
-  customItems=customItems.filter(i=>i.id!==id);delete priceOverrides[id];await put('kv',customItems,'customItems');await put('kv',priceOverrides,'priceOverrides');renderSettings();renderStartItems();});
-$('customMapTable').addEventListener('click',async e=>{const id=e.target.dataset?.rmmap;if(!id)return;
-  if((await getAll('sessions')).some(s=>s.mapId===id)){alert('ลบไม่ได้ เพราะมีรอบที่บันทึกด้วยแมพนี้ — แก้รอบเหล่านั้นให้เป็นแมพอื่นก่อน');return;}
-  if(!confirm('ลบแมพนี้?'))return;customMaps=customMaps.filter(m=>m.id!==id);await put('kv',customMaps,'customMaps');renderSettings();setStartMap(selectedChar()?.last?.mapId);});
-async function saveSellPrices(){
-  $('sellTable').querySelectorAll('tr[data-id]').forEach(tr=>{const v=num(tr.querySelector('.pm').value);const id=tr.dataset.id;
-    if(v!=null)priceOverrides[id]={market:v};else delete priceOverrides[id];});
-  await put('kv',priceOverrides,'priceOverrides');renderSettings();alert('บันทึกราคาของขายเองแล้ว รอบต่อไปจะใส่ราคานี้ให้อัตโนมัติ');
-}
-
-/* ===================== backup ===================== */
-async function exportJson(){
-  const data={app:'logbook',schema:SCHEMA,exported:new Date().toISOString(),characters,customItems,customMaps,priceOverrides,
-    sessions:await getAll('sessions'),shots:await getAll('shots')};
-  download(new Blob([JSON.stringify(data)],{type:'application/json'}),`logbook-${dayKey(Date.now())}.json`);
-}
-async function exportCsv(){
-  const ss=(await getAll('sessions')).filter(s=>s.end).sort((a,b)=>a.startTime-b.startTime);
-  const head=['date','start','end','character','job','branch','map_id','map','party','hours','level_start','level_end','exp','exp_per_hr','farm_mesos','potion_cost','profit','profit_per_hr','potions_gained_value','drops_value','item_value','deaths','safety_charm','potions','drops'];
-  const rows=ss.map(s=>{const c=calc(s);return [dayKey(s.startTime),timeStr(s.startTime),timeStr(s.endTime),s.charName||'',jobOf(s.job)?.name||'',s.branch||'',s.mapId,s.mapName,s.party||1,c.hours.toFixed(2),s.start.level,s.end.level,c.exp,Math.round(c.expHr||0),c.farmMesos,c.potionCost,c.profit,Math.round(c.profitHr||0),c.gainedValue,c.dropValue,c.itemValue,c.deaths,c.charm,
-    c.potions.map(p=>`${p.name}:${p.used?'-'+p.used:p.gained?'+'+p.gained:0}`).join('; '),(s.end.drops||[]).map(d=>d.name+' x'+d.qty).join('; ')];});
-  const csv=[head,...rows].map(r=>r.map(v=>`"${String(v??'').replace(/"/g,'""')}"`).join(',')).join('\n');
-  download(new Blob(['﻿'+csv],{type:'text/csv'}),`logbook-${dayKey(Date.now())}.csv`);
-}
-function download(blob,name){const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),2000);}
-async function importJson(file){
-  try{const d=JSON.parse(await file.text());
-    if(!confirm(`นำเข้า ${d.sessions?.length||0} รอบ และ ${d.shots?.length||0} รูป? (รอบที่ id ซ้ำจะถูกแทนที่)`))return;
-    // merge reference data first so migrated sessions resolve to the same IDs
-    for(const m of d.customMaps||[])if(!mapOf(m.id)&&!findMapByName(m.name))customMaps.push(m);
-    for(const it of d.customItems||[])if(!allItems().has(it.id)&&!findItemByName(it.name))customItems.push(it);
-    await put('kv',customMaps,'customMaps');await put('kv',customItems,'customItems');
-    // characters: merge by id; keep the newer "last" state
-    for(const c of d.characters||[]){const cur=charOf(c.id);
-      if(!cur)characters.push(c);else if((c.last?.at||0)>(cur.last?.at||0))cur.last=c.last;}
-    await saveChars();
-    for(const s of d.sessions||[])await put('sessions',await migrateSession(s));
-    for(const s of d.shots||[])await put('shots',s);
-    renderSettings();fillCharSelect($('s_char'),$('s_char').value);onCharChange();renderHistory();renderSummary();alert('นำเข้าเรียบร้อย');
-  }catch(e){alert('ไฟล์ไม่ถูกต้อง: '+e.message);}
-}
-
+function download(blob,name){const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=name;document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove();},1000);}
 /* ===================== wiring ===================== */
-document.querySelectorAll('#tabs button').forEach(b=>b.onclick=()=>{
-  document.querySelectorAll('#tabs button').forEach(x=>x.classList.toggle('on',x===b));
-  ['session','history','summary','settings'].forEach(t=>$('t-'+t).style.display=t===b.dataset.t?'':'none');
-  if(b.dataset.t==='summary')renderSummary();if(b.dataset.t==='settings')renderSettings();
-});
 $('btnShare').onclick=startShare;$('btnStopShare').onclick=stopShare;
 $('btnSnap').onclick=()=>active?saveShot('manual','ถ่ายเอง'):alert('กดเริ่มการผจญภัยก่อนนะคะ ภาพจะได้ผูกกับรอบนั้น');
 $('autoInt').onchange=setupAuto;
@@ -2955,8 +2659,6 @@ initMapPicker();
 $('s_char').onchange=onCharChange;
 $('themeBtn').onclick=cycleTheme;applyTheme(getTheme());
 $('btnStart').onclick=()=>{if(!SW.validateAll())return;if(pipAutoOn()&&!PIP.isOpen())PIP.open();startSession();};$('btnCheck').onclick=checkpoint;$('btnEnd').onclick=()=>{if(EW.validateAll())endSession();};$('btnCancel').onclick=cancelSession;
-$('btnSavePrices').onclick=savePrices;$('btnSaveSell').onclick=saveSellPrices;$('btnExport').onclick=exportJson;$('btnCsv').onclick=exportCsv;
-$('fileImport').onchange=e=>{e.target.files[0]&&importJson(e.target.files[0]);e.target.value='';};
 document.addEventListener('click',e=>{const s=e.target.closest('.shot');if(!s)return;const lb=$('lightbox');lb.querySelector('img').src=s.querySelector('img').src;lb.style.display='flex';});
 $('lightbox').onclick=()=>$('lightbox').style.display='none';
 $('modal').addEventListener('click',e=>{if(e.target.id==='modal')e.target.style.display='none';});
@@ -2974,8 +2676,9 @@ window.addEventListener('beforeunload',e=>{if(active&&stream){e.preventDefault()
     for(const it of v1prices.items||[])if(it.name&&it.price){const found=findItemByName(it.name);if(found)priceOverrides[found.id]={shop:found.shop,market:it.price};}
     await put('kv',priceOverrides,'priceOverrides');
   }
-  for(const s of await getAll('sessions'))if(s.schema!==SCHEMA)await put('sessions',await migrateSession(s));
-  const a=await getKV('active');active=a?await migrateSession(a):null;if(active)await put('kv',active,'active');
+  // no history any more: drop old rounds and pictures once, and never resume a round after a refresh
+  if(!(await getKV('noHistoryV1'))){for(const x of await getAll('sessions'))await del('sessions',x.id);for(const x of await getAll('shots'))await del('shots',x.id);await put('kv',true,'noHistoryV1');}
+  await del('kv','active');active=null;
   await put('kv',true,'migratedV2');
   fillCharSelect($('s_char'),active?.charId);onCharChange();
   if(active){currentJob=active.job;renderJobRow();}
@@ -2983,7 +2686,7 @@ window.addEventListener('beforeunload',e=>{if(active&&stream){e.preventDefault()
   if(active){$('c_level').value=active.start.level??'';$('e_level').value=active.start.level??'';renderEndForm();}
   $('logoBook').src=LOGO_IMG.book;$('logoWord').src=LOGO_IMG.word;applyCoinIcons();
   preloadItemImgs();await OCR.init();
-  showActive();renderHistory();renderSummary();
+  showActive();
 })();
 </script>
 </body>
