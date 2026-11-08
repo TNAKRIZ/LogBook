@@ -288,7 +288,7 @@ footer a{color:inherit}
           <button class="btn ghost sm" id="ocrSave" type="button" title="บันทึกภาพจอที่ระบบเห็นตอนนี้ เป็นไฟล์ PNG ส่งให้ผู้พัฒนาใช้ทดสอบ">💾 เก็บภาพทดสอบ</button>
           <button class="btn sm" id="pipBtn" type="button" title="หน้าต่างเล็กลอยทับเกม ดูสถิติได้โดยไม่ต้องสลับจอ">🪟 หน้าต่างลอย</button>
         </div>
-        <p class="muted small" id="ocrHint" style="margin:6px 0 0">ระบบหากรอบให้เองตอนเริ่มแชร์จอ · ถ้าบางช่องอ่านไม่ได้ กด "ตั้งกรอบ" แล้วลากกรอบ<b>ให้แคบ คลุมเฉพาะตัวเลข</b> (ไม่รวมคำว่า EXP, หลอด, ไอคอนเหรียญ หรือปุ่ม) · ครั้งแรกต้องต่อเน็ตเพื่อโหลดตัวอ่านตัวเลข</p>
+        <p class="muted small" id="ocrHint" style="margin:6px 0 0;white-space:pre-line">ระบบหากรอบให้เองตอนเริ่มแชร์จอ · ถ้าบางช่องอ่านไม่ได้ กด "ตั้งกรอบ" แล้วลากกรอบ<b>ให้แคบ คลุมเฉพาะตัวเลข</b> (ไม่รวมคำว่า EXP, หลอด, ไอคอนเหรียญ หรือปุ่ม) · ครั้งแรกต้องต่อเน็ตเพื่อโหลดตัวอ่านตัวเลข</p>
         <div class="ocrzoom" id="ocrZoomWrap" hidden><span class="muted small">ภาพในกรอบ (ขยาย)</span><canvas id="ocrZoom"></canvas></div>
         <div class="stats" id="ocrStats" style="margin-top:8px"></div>
         <div class="row small muted" id="ocrPeek" style="margin-top:6px"></div>
@@ -1632,6 +1632,12 @@ const OCR=(()=>{
       const c=document.createElement('canvas');c.width=Math.round(w);c.height=Math.round(h);c.getContext('2d').drawImage(video,x,y,w,h,0,0,c.width,c.height);
       auto.anchor={url:c.toDataURL('image/png'),w:c.width,h:c.height,dx:bx-x,dy:by-y,bw,bh,W};AFC.anchor=c;await put('kv',auto,'ocrAuto');return true;}
     return false;}
+  /* How big the game's interface is in the shared picture (P = HP→MP gauge distance). On Harry's screens reads are reliable
+     from P ≈ 150 (a 1920-wide game window shared at full size) and fail around P ≈ 110 (≈1400 wide). */
+  function sizeCheck(){const P=auto.hud?.P;if(!P)return null;const W=video.videoWidth,H=video.videoHeight;
+    if(P>=145)return {ok:true,text:`ภาพ ${W}×${H} · ตัวเลขในเกมใหญ่พอ อ่านได้แม่น ✓`};
+    if(P>=120)return {ok:true,warn:true,text:`ภาพ ${W}×${H} · ตัวเลขค่อนข้างเล็ก อาจอ่านพลาดบ้าง — ขยายหน้าต่างเกมให้ใหญ่ขึ้นจะดีกว่า`};
+    return {ok:false,text:`ภาพ ${W}×${H} · ตัวเลขในเกมเล็กเกินไป อ่านพลาดง่าย — ขยายหน้าต่างเกม (แนะนำกว้าง 1920 ขึ้นไป แบบหน้าต่าง ไม่เต็มจอ) · Windows Scale 100% · ตอนแชร์ เลือก "หน้าต่าง" เกม`};}
   async function autoFind(force=false){
     if(!stream||!video.videoWidth||isBlack())return null;const out={};
     if(force){auto.src={};auto.anchor=null;AFC.anchor=null;}
@@ -1642,7 +1648,7 @@ const OCR=(()=>{
     if(Object.keys(out).length){await put('kv',regions,'ocrRegions');await put('kv',{w:video.videoWidth,h:video.videoHeight},'ocrRegionsSize');st.q.relocate++;}
     await put('kv',auto,'ocrAuto');drawBoxes();return out;}
   const autoText=o=>{if(!o)return '';const y=k=>o[k]||regions[k]?'✓':'—';
-    return `🧭 หากรอบเอง: EXP ${y('exp')} · เลเวล/ชื่อ ${y('who')} · แมพ ${y('map')} · เงิน ${regions.meso?'✓':'— เปิดกระเป๋าในเกมแป๊บนึง ระบบจะเจอเอง'}`;};
+    const sz=sizeCheck();return (sz?`${sz.ok?(sz.warn?'⚠️ ':''):'⛔ '}${sz.text}\n`:'')+`🧭 หากรอบเอง: EXP ${y('exp')} · เลเวล/ชื่อ ${y('who')} · แมพ ${y('map')} · เงิน ${regions.meso?'✓':'— เปิดกระเป๋าในเกมแป๊บนึง ระบบจะเจอเอง'}`;};
   // while the inventory is closed: look for the Meso field every few seconds; the moment it shows, read it
   let seekTimer=null;
   function seekStart(){seekStop();seekTimer=tickWin.setInterval(seekMeso,3000);}
@@ -1946,12 +1952,12 @@ const OCR=(()=>{
     const warn=n=>n>=3?' <span class="bad sub">อ่านไม่ได้ '+n+' ครั้ง</span>':'';
     $('ocrStats').innerHTML=
       stat('EXP ตอนนี้',`${st.expEst?'≈':''}${fmt(st.exp)}${st.pct!=null?` <span class="sub">${st.pct}%</span>`:''}${warn(st.errExp)}`)+
-      stat('EXP/นาที',fmtK(eMin))+stat('EXP/ชม. (เฉพาะเวลาที่ได้ EXP)',fmtK(rate)+(timer&&expIdle()?' <span class="sub warn">⏸ หยุดนับ</span>':''))+
+      stat('EXP/10 นาที',fmtK(rate!=null?rate/6:null))+stat('EXP/ชม. (เฉพาะเวลาที่ได้ EXP)',fmtK(rate)+(timer&&expIdle()?' <span class="sub warn">⏸ หยุดนับ</span>':''))+
       stat('อัปเลเวลในอีก',left&&rate?dur(left/rate*3.6e6):'–')+
       (()=>{const ex=mesoExtra(),ago=st.lastMesoT?Math.round((Date.now()-st.lastMesoT)/60000):null,
         note=ex>0||mesoOff?` <span class="sub">${mesoOff||st.mesoHidden?'กระเป๋าปิด':'ยังไม่เห็นเงิน'}${ago!=null?` · เห็นล่าสุด ${ago} นาทีก่อน`:''}</span>`:'';
         return stat('Meso ตอนนี้',(st.meso!=null?(ex>0?'≈':'')+fmt(Math.round(st.meso+ex)):'–')+note+warn(st.errMeso))+stat('Meso เก็บได้',st.meso==null&&!(ex>0)?'–':(ex>0?'≈':'')+fmt(Math.round(st.mesoCollected+ex)));})()+
-      stat('Meso/นาที',fmtK(mMin))+stat('Meso/ชม. (เฉพาะเวลาฟาร์ม)',fmtK(mHr||(mMin?mMin*60:null)));
+      stat('Meso/10 นาที',fmtK(mHr!=null?mHr/6:null))+stat('Meso/ชม. (เฉพาะเวลาฟาร์ม)',fmtK(mHr));
     if(typeof PIP!=='undefined')PIP.update();
   }
   /* ---- autofill start / checkpoint / end fields (still editable) ---- */
@@ -2021,7 +2027,7 @@ const OCR=(()=>{
 renderLog();render();$('ocrHint').textContent='↺ เริ่มนับใหม่แล้ว — ตัวเลขจะขึ้นอีกครั้งในไม่กี่วินาที';if(was)start();else if(stream)readOnce();}
   return {init,live,setTicker,readNow,seed,restart,rememberMap,checkBoxes,learnPct:async v=>{if(!stream||!regions.exp||v==null)return;await tplLoad();const V=variants(regions.exp);if(!V)return;const ds=String(Math.round(v*100)).padStart(3,'0');
     for(const x of V.list){if(x.pctOnly&&x.gPct&&x.pctInt!=null&&x.gPct.length===ds.length&&x.pctInt===ds.length-2)await tplLearn('pct',x.gPct,ds);}},
-  learnMeso:async v=>{if(!stream||!regions.meso||v==null)return;const r=await readNow();if(!r.listMeso)return;const dm=String(v);for(const x of r.listMeso){const g=alignGlyphs(x.gAll,dm.length);if(g)await tplLearn('meso',g,dm);}},_tpl:()=>TPL,_tplLearn:tplLearn,_levelCanvases:()=>levelCanvases(regions.who).map(c=>c.toDataURL()),_fromPct:v=>fromPct(v),_titlePrint:titlePrint,_printSim:printSim,_variants:k=>{const V=variants(regions[k]);return V?V.list.map(v=>({tag:v.tag,count:v.count,modeH:v.modeH,img:v.canvas.toDataURL()})):null;},hasRegions:()=>!!(regions.exp||regions.meso),hasAny:()=>Object.values(regions).some(Boolean),has:k=>!!regions[k],readWho,readMap,_readNow:readNow,reset:()=>{reset();render();},snapshot:()=>({expGained:st.expGained,mesoCollected:st.mesoCollected,t0:st.t0,quality:{...st.q,mesoEst:st.q.mesoEst.slice(-20),rateHr:Math.round(expRate()||0),mesoExtra:Math.round(mesoExtra()),auto:{...auto.src}}}),autoFind,autoText,setMap,_findHud:findHud,_locateMeso:()=>locateMeso(auto.hud),_mesoVisible:mesoVisible,_auto:()=>auto,_mesoExtra:mesoExtra,_seek:seekMeso,_learnAnchor:learnMesoAnchor,_mesoOff:()=>mesoOff,_setMesoOff:v=>{mesoOff=!!v;st.mesoHidden=v?Date.now():null;},_setRegion:(k,v)=>{regions[k]=v;},_live:()=>live(),readChat,_variantsOf:r=>variants(r),_tplSim:(a,b)=>tplSim(a,b),_relevel:relevel,autofill,_learnLevel:learnLevel,_readLevelDigits:async()=>readLevelDigits(await ensure()),learnLevel,_variants:k=>variants(regions[k]),_readRegion:async k=>readRegion(await ensure(),k),_render:()=>render(),stop,drawBoxes,_parseExp:parseExp,_parseMeso:parseMeso,_st:st,_accExp:acceptExp,_reqNow:reqNow,_accMeso:acceptMeso,_repairExp:v=>repairExp(v),_fitLevels:fitLevels,_setHint:h=>{levelHint=h;}};
+  learnMeso:async v=>{if(!stream||!regions.meso||v==null)return;const r=await readNow();if(!r.listMeso)return;const dm=String(v);for(const x of r.listMeso){const g=alignGlyphs(x.gAll,dm.length);if(g)await tplLearn('meso',g,dm);}},_tpl:()=>TPL,_tplLearn:tplLearn,_levelCanvases:()=>levelCanvases(regions.who).map(c=>c.toDataURL()),_fromPct:v=>fromPct(v),_titlePrint:titlePrint,_printSim:printSim,_variants:k=>{const V=variants(regions[k]);return V?V.list.map(v=>({tag:v.tag,count:v.count,modeH:v.modeH,img:v.canvas.toDataURL()})):null;},hasRegions:()=>!!(regions.exp||regions.meso),hasAny:()=>Object.values(regions).some(Boolean),has:k=>!!regions[k],readWho,readMap,_readNow:readNow,reset:()=>{reset();render();},snapshot:()=>({expGained:st.expGained,mesoCollected:st.mesoCollected,t0:st.t0,quality:{...st.q,mesoEst:st.q.mesoEst.slice(-20),rateHr:Math.round(expRate()||0),mesoExtra:Math.round(mesoExtra()),auto:{...auto.src}}}),autoFind,autoText,setMap,_findHud:findHud,_locateMeso:()=>locateMeso(auto.hud),_mesoVisible:mesoVisible,_auto:()=>auto,_mesoExtra:mesoExtra,_seek:seekMeso,_learnAnchor:learnMesoAnchor,_mesoOff:()=>mesoOff,_setMesoOff:v=>{mesoOff=!!v;st.mesoHidden=v?Date.now():null;},_setRegion:(k,v)=>{regions[k]=v;},_live:()=>live(),sizeCheck,readChat,_variantsOf:r=>variants(r),_tplSim:(a,b)=>tplSim(a,b),_relevel:relevel,autofill,_learnLevel:learnLevel,_readLevelDigits:async()=>readLevelDigits(await ensure()),learnLevel,_variants:k=>variants(regions[k]),_readRegion:async k=>readRegion(await ensure(),k),_render:()=>render(),stop,drawBoxes,_parseExp:parseExp,_parseMeso:parseMeso,_st:st,_accExp:acceptExp,_reqNow:reqNow,_accMeso:acceptMeso,_repairExp:v=>repairExp(v),_fitLevels:fitLevels,_setHint:h=>{levelHint=h;}};
 })();
 
 // two taps within 3 s → start counting again from what is on screen now (regions are kept)
