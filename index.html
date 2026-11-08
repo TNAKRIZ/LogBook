@@ -1472,6 +1472,8 @@ const OCR=(()=>{
         for(const w of mt){if(tt.some(x=>x===w||(w.length>=4&&near(x,w))))hit++;}
         // the map's own words must be there; stray words from the box (map art, buttons) cost a little
         sc=Math.max(sc,0.75*hit/mt.length+0.25*Math.min(1,hit/tt.length));}
+      const stw=(m.street||'').toLowerCase().split(/[^a-z0-9]+/).filter(w=>w.length>=3);
+      if(stw.length&&sc>0){const all=texts.join(' ').toLowerCase().split(/[^a-z0-9]+/);const sh=stw.filter(w=>all.some(x=>x===w||(w.length>=4&&near(x,w)))).length/stw.length;sc+=0.1*sh;}
       rank.push({m,sc});if(sc>bs){second=bs;bs=sc;best=m;}else if(sc>second)second=sc;}
     rank.sort((a,b)=>b.sc-a.sc);
     // "Remains <Tomb> II" vs "III": the same words, only the roman numeral differs. Reading tends to LOSE strokes ("III" → "ll"),
@@ -1504,22 +1506,24 @@ const OCR=(()=>{
   async function rememberMap(mapId){if(!stream||!regions.map||!mapId)return;const p=titlePrint();if(!p)return;
     const all=(await getKV('mapPrints'))||[];const keep=all.filter(x=>!(printSim(x,p)>0.9));   // also forgets the same picture filed under a wrong map
     keep.unshift({mapId,...p,t:Date.now()});await put('kv',keep.slice(0,300),'mapPrints');}
-  async function readMap(maps){if(!stream||!regions.map||!video.videoWidth||isBlack())return null;
+  /* The map comes from what the minimap title SAYS on screen, matched against the map database (name + street line):
+       1. the text names one map clearly                → that map
+       2. the text is unsure (e.g. "Ant Tunnel (I")      → the title picture remembered from an earlier confirmation, if any
+       3. otherwise                                      → the best database match, filled in right away (changeable)  */
+  async function readMap(maps){if(!stream||!regions.map||!video.videoWidth||isBlack())return null;maps=maps||[];
+    const w=await ensure(),texts=await readWords(w,'map'),raw=texts.map(t=>t.replace(/\s+/g,' ').trim()).join(' | ');
+    const tm=matchMap(texts,maps),rank=lastRank.slice();
+    // "Camp 1" as whole words; a numeral glued to a symbol ("(I") is not clean enough to trust over a remembered picture
+    const says=nm=>{const re=new RegExp('(?:^|\\s)'+nm.trim().split(/\s+/).map(x=>x.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')).join('\\s+')+'(?=\\s|$|\\|)','i');return texts.some(t=>re.test(t.replace(/\s+/g,' ')));};
+    if(tm&&says(tm.name))return {map:tm,cands:[],raw};
     const p=titlePrint(),prints=(await getKV('mapPrints'))||[];
     if(p&&prints.length){let best=null,bs=0,second=0;
       for(const x of prints){const sc=printSim(p,x);if(sc>bs){if(best?.mapId!==x.mapId)second=bs;bs=sc;best=x;}else if(x.mapId!==best?.mapId&&sc>second)second=sc;}
-      const m=best&&(maps||[]).find(mm=>String(mm.id)===String(best.mapId));
-      if(m&&bs>=0.86&&bs-second>=0.06){
-        // "Camp 1" and "Camp 2" look alike as pictures: the text still has the last word — if it clearly names another map, it wins
-        const w=await ensure(),texts=await readWords(w,'map'),tm=matchMap(texts,maps||[]);
-        // only when the text says it cleanly ("Camp 1" as whole words) — "Ant Tunnel (I" is too unsure to overrule "Ant Tunnel II"
-        const says=nm=>{const re=new RegExp('(?:^|\\s)'+nm.trim().split(/\s+/).map(w=>w.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')).join('\\s+')+'(?=\\s|$|\\|)','i');return texts.some(t=>re.test(t.replace(/\s+/g,' ')));};
-        if(tm&&String(tm.id)!==String(m.id)&&says(tm.name)&&!says(m.name)){await put('kv',prints.filter(x=>!(String(x.mapId)===String(m.id)&&printSim(p,x)>0.86)),'mapPrints');
-          return {map:tm,cands:[],raw:texts.map(t=>t.replace(/\s+/g,' ').trim()).join(' | ')+' (ตัวหนังสือไม่ตรงกับภาพที่จำไว้ — ใช้ตัวหนังสือ)'};}
-        return {map:m,raw:`จำภาพชื่อแมพได้ (ตรงกัน ${Math.round(bs*100)}%)`,byPicture:true,cands:[]};}}
-    const w=await ensure();
-    const texts=await readWords(w,'map');const map=matchMap(texts,maps||[]);
-    return {map,cands:map?[]:lastRank,raw:texts.map(t=>t.replace(/\s+/g,' ').trim()).join(' | ')};}
+      const m=best&&maps.find(mm=>String(mm.id)===String(best.mapId));
+      if(m&&bs>=0.86&&bs-second>=0.06&&!(tm&&says(tm.name)))return {map:m,raw:`${raw} · จำภาพชื่อแมพได้ (ตรงกัน ${Math.round(bs*100)}%)`,byPicture:true,cands:[]};}
+    if(tm)return {map:tm,cands:[],raw};
+    if(rank[0])return {map:rank[0],cands:rank,raw:raw+' · ใกล้เคียงที่สุดในฐานข้อมูล',guess:true};   // fill the closest one; the player can change it
+    return {map:null,cands:[],raw};}
   /* boxes are kept as parts of the shared picture: if the game window changed size since they were drawn they point at the wrong
      place (MapleStory's interface does not scale with the window). Also flag boxes that hold nothing at all. */
   async function checkBoxes(){const out=[];if(!stream||!video.videoWidth)return out;
@@ -2379,7 +2383,10 @@ async function detectMap(){
   const box=$('mapNote');if(!stream||!OCR.has('map')){box.innerHTML='';return;}
   box.innerHTML='⏳ กำลังอ่านชื่อแมพจากจอ…';
   let r;try{r=await OCR.readMap(allMaps());}catch(e){box.innerHTML='⚠️ '+esc(e.message);return;}
-  if(r?.map){mapSeen=r.map;setStartMap(r.map.id);box.innerHTML=`🔎 ${r.byPicture?'จำภาพชื่อแมพได้':'อ่านจากจอ'}: <b>${esc(r.map.name)}</b> — เลือกให้แล้ว ✓ <span class="muted small">(ไม่ใช่? ค้นหาแมพอื่นด้านล่างได้)</span>`;}
+  if(r?.map&&r.guess){mapSeen=r.map;setStartMap(r.map.id);const alt=(r.cands||[]).filter(m=>String(m.id)!==String(r.map.id));
+    box.innerHTML=`🔎 อ่านได้ใกล้เคียงที่สุด: <b>${esc(r.map.name)}</b> — ใส่ให้แล้ว${alt.length?` · หรือ ${alt.map(m=>`<button type="button" class="btn ghost sm" data-mapc="${esc(String(m.id))}">${esc(m.name)}</button>`).join(' ')}`:''}`;
+    box.querySelectorAll('[data-mapc]').forEach(b=>b.onclick=()=>{const m=mapOf(b.dataset.mapc);if(!m)return;mapSeen=m;setStartMap(m.id);OCR.rememberMap(m.id);box.innerHTML=`🔎 <b>${esc(m.name)}</b> — เลือกแล้ว ✓`;});}
+  else if(r?.map){mapSeen=r.map;setStartMap(r.map.id);box.innerHTML=`🔎 ${r.byPicture?'จำภาพชื่อแมพได้':'อ่านจากจอ'}: <b>${esc(r.map.name)}</b> — เลือกให้แล้ว ✓ <span class="muted small">(ไม่ใช่? ค้นหาแมพอื่นด้านล่างได้)</span>`;}
   else if(r?.cands?.length){box.innerHTML=`🔎 อ่านชื่อแมพได้ไม่ชัด — ใช่แมพไหนคะ? ${r.cands.map(m=>`<button type="button" class="btn ghost sm" data-mapc="${esc(String(m.id))}">${esc(m.name)}</button>`).join(' ')} <span class="muted small">หรือค้นหาด้านล่าง · เลือกครั้งเดียว ครั้งหน้าระบบจำภาพชื่อแมพนี้ได้เอง</span>`;
     box.querySelectorAll('[data-mapc]').forEach(b=>b.onclick=()=>{const m=mapOf(b.dataset.mapc);if(!m)return;mapSeen=m;setStartMap(m.id);OCR.rememberMap(m.id);
       box.innerHTML=`🔎 <b>${esc(m.name)}</b> — เลือกแล้ว ✓ ระบบจำภาพชื่อแมพนี้ไว้แล้ว`;});}
