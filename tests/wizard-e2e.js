@@ -1,6 +1,6 @@
 const {chromium}=require('playwright');const fs=require('fs');
 (async()=>{
-  const S=process.env.S;const b=await chromium.launch();const ctx=await b.newContext({viewport:{width:1280,height:900},reducedMotion:'reduce'});const p=await ctx.newPage();
+  const S=process.env.S;if(!S){console.log("SKIP wizard-e2e: set S=<folder with avatar_test.png> (screenshots are written there)");process.exit(0);}const b=await chromium.launch();const ctx=await b.newContext({viewport:{width:1280,height:900},reducedMotion:'reduce'});const p=await ctx.newPage();
   const errs=[];p.on('pageerror',e=>errs.push(e.message));p.on('console',m=>{if(m.type()==='error'&&!/net::|fonts/.test(m.text()))errs.push(m.text())});
   p.on('dialog',async d=>{console.log('DIALOG:',d.message().replace(/\n/g,' | '));await d.accept();});
   await p.goto('http://localhost:8123/index.html');await p.waitForTimeout(800);
