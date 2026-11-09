@@ -288,6 +288,7 @@ footer a{color:inherit}
           <button class="btn ghost sm" id="ocrMapBox" type="button" title="ชื่อแมพบนแผนที่มุมซ้ายบน">🎯 กรอบ ชื่อแมพ</button>
           <label class="row small" style="margin:0;color:var(--ink)"><input type="checkbox" id="ocrOn"> เปิดอ่าน ทุก</label><select id="ocrInt" style="width:auto" title="อ่านถี่ = ตัวเลขสดกว่า แต่กินเครื่องมากกว่า"><option value="15" selected>15 วิ</option><option value="30">30 วิ</option></select>
           <label class="row small" style="margin:0;color:var(--ink)" title="อ่านข้อความขวาล่าง (ได้ EXP / เงิน / ของ) ทุกวินาที: นับมอนที่ล้ม EXP แบบเป๊ะ เงินช่วงปิดกระเป๋า และของดรอป"><input type="checkbox" id="msgOn" checked> นับจากข้อความขวาล่าง</label>
+          <label class="row small" style="margin:0;color:var(--ink)" title="เสียงติ๊ดตอนได้ของดี (อุปกรณ์ / สกรอล) — ป้ายยังเด้งเหมือนเดิม"><input type="checkbox" id="rareSound" checked> 🔔 เสียงเตือนของดี</label>
           <button class="btn ghost sm" id="ocrReset" type="button" title="ล้างตัวเลขที่นับไว้ แล้วเริ่มนับใหม่จากตอนนี้ (กด 2 ครั้ง)">↺ เริ่มนับใหม่</button>
           <button class="btn ghost sm" id="ocrSave" type="button" title="บันทึกภาพจอที่ระบบเห็นตอนนี้ เป็นไฟล์ PNG ส่งให้ผู้พัฒนาใช้ทดสอบ">💾 เก็บภาพทดสอบ</button>
           <button class="btn sm" id="pipBtn" type="button" title="หน้าต่างเล็กลอยทับเกม ดูสถิติได้โดยไม่ต้องสลับจอ">🪟 หน้าต่างลอย</button>
@@ -1812,6 +1813,7 @@ const OCR=(()=>{
   function cleanExp(v){
     if(!v||!isFinite(v.exp)||v.exp<=0)return null;v={exp:v.exp,pct:v.pct,est:!!v.est};
     // past 1,000,000 EXP the game shows only the %: a plain number read there can't be on screen (e.g. "58.25%" read as 58,257)
+    if(!v.est&&v.exp>=EXP_HIDE)return null;                                     // …so an exact number that big is itself a misread (e.g. 256,386 + a stray 6)
     if(!v.est&&st.exp!=null&&st.exp>=EXP_HIDE&&!(v.pct!=null&&st.pct>60&&v.pct<40))return null;
     if(typeof EXP_REQ!=='undefined'&&v.pct!=null){
       if(!v.est){const Ls=fitLevels(v);   // runs even when the level came from the form: a stale "62" is outvoted by the bar                  // the bar itself tells the level —
@@ -2699,9 +2701,12 @@ $('chatAuto')?.addEventListener('change',e=>{clearInterval(CHAT.timer);CHAT.time
 /* ---- bottom-right notices: on/off, rare-drop alert, drops filled in at quit ---- */
 try{const v=localStorage.getItem('lb_msgOn');if(v==='0'){$('msgOn').checked=false;OCR.setMsgOn(false);}}catch(e){}
 $('msgOn')?.addEventListener('change',e=>{OCR.setMsgOn(e.target.checked);try{localStorage.setItem('lb_msgOn',e.target.checked?'1':'0');}catch(_){}});
+try{if(localStorage.getItem('lb_rareSound')==='0')$('rareSound').checked=false;}catch(e){}
+$('rareSound')?.addEventListener('change',e=>{try{localStorage.setItem('lb_rareSound',e.target.checked?'1':'0');}catch(_){}});
 const isRare=p=>/^(eq|equip)/i.test(p.cat||'')||/scroll/i.test(p.name||'');
 function rareAlert(p){let box=$('rareToast');if(!box){box=document.createElement('div');box.id='rareToast';box.className='rare-toast';document.body.appendChild(box);}
   const el=document.createElement('div');el.textContent=`✨ ได้ของดี! ${p.name}${p.n>1?' ×'+p.n:''}`;box.appendChild(el);setTimeout(()=>el.remove(),8000);
+  if($('rareSound')&&!$('rareSound').checked)return;
   try{const ac=new (window.AudioContext||window.webkitAudioContext)();[880,1320].forEach((f,i)=>{const o=ac.createOscillator(),g=ac.createGain();o.frequency.value=f;o.connect(g);g.connect(ac.destination);
     const t=ac.currentTime+i*0.15;g.gain.setValueAtTime(0.0001,t);g.gain.exponentialRampToValueAtTime(0.2,t+0.02);g.gain.exponentialRampToValueAtTime(0.0001,t+0.3);o.start(t);o.stop(t+0.32);});setTimeout(()=>ac.close(),1200);}catch(e){}}
 document.addEventListener('lb-item',e=>{if(isRare(e.detail))rareAlert(e.detail);});
