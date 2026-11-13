@@ -42,6 +42,14 @@ header{padding:14px 16px 12px;display:flex;flex-direction:column;gap:10px;align-
 @keyframes bookbob{0%,100%{transform:rotate(-3deg) translateY(0)}50%{transform:rotate(-3deg) translateY(-3px)}}
 .slogan{margin:0;font:700 16px/1.3 "Pixelify Sans",system-ui,sans-serif;letter-spacing:.6px;color:var(--band-ink)}
 .sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.vchip{margin-top:2px;padding:2px 10px;border:1px solid rgba(253,231,207,.35);border-radius:999px;background:transparent;color:var(--band-ink);font:600 12px/1.6 var(--num);cursor:pointer;opacity:.85}
+.vchip:hover{opacity:1;border-color:var(--band-ink)}
+.vchip.new{opacity:1;background:var(--accent);color:var(--accent-ink);border-color:var(--accent-edge)}
+.vdlg{max-width:min(460px,calc(100vw - 32px));border:1px solid var(--line);border-radius:12px;background:var(--card);color:var(--ink);padding:16px 18px}
+.vdlg::backdrop{background:rgba(0,0,0,.45)}
+.vdlg h3{margin:0 0 8px;font-size:16px}.vdlg h4{margin:12px 0 4px;font-size:13px;color:var(--muted)}.vdlg ul{margin:0;padding-left:20px}
+.vdlg .vnew{background:var(--accent-soft);border-radius:8px;padding:8px 10px;margin-bottom:8px}
+.vdlg .row{display:flex;gap:8px;justify-content:flex-end;margin-top:14px}
 .headbar{display:flex;align-items:flex-end;justify-content:center;gap:10px 24px;flex-wrap:wrap;width:100%}
 @media(max-width:520px){.hero .book{height:58px}.hero .wordmark{height:78px}.slogan{font-size:13px}}
 .jobrow{display:flex;align-items:flex-end;gap:10px;flex-wrap:wrap}
@@ -242,12 +250,13 @@ footer a{color:inherit}
 </head>
 <body>
 <div class="topband"><header>
-  <div class="brand"><h1 class="sr">LogBook บันทึกนักผจญภัย</h1><div class="hero"><img class="book" id="logoBook" alt="" aria-hidden="true"><img class="wordmark" id="logoWord" alt="LogBook บันทึกนักผจญภัย"></div><p class="slogan">Log your journey, share your glory.</p></div><div class="headbar"><div class="jobrow" id="jobRow" aria-hidden="true"></div>
+  <div class="brand"><h1 class="sr">LogBook บันทึกนักผจญภัย</h1><div class="hero"><img class="book" id="logoBook" alt="" aria-hidden="true"><img class="wordmark" id="logoWord" alt="LogBook บันทึกนักผจญภัย"></div><p class="slogan">Log your journey, share your glory.</p><button type="button" class="vchip" id="vChip" aria-haspopup="dialog"></button></div><div class="headbar"><div class="jobrow" id="jobRow" aria-hidden="true"></div>
   <nav id="tabs">
     <button data-t="session" class="on">เริ่มบันทึกการผจญภัย</button>
     <button id="themeBtn" type="button">🌗 ตามเครื่อง</button>
   </nav></div>
 </header></div>
+<dialog class="vdlg" id="vDlg" aria-labelledby="vDlgT"><h3 id="vDlgT">มีอะไรใหม่</h3><div id="vDlgBody"></div><div class="row"><button type="button" id="vReload" hidden>โหลดเวอร์ชันใหม่</button><button type="button" id="vClose">ปิด</button></div></dialog>
 <main>
 
 <!-- ================= SESSION ================= -->
@@ -2918,6 +2927,35 @@ $('autoInt').onchange=setupAuto;
 initMapPicker();
 $('s_char').onchange=onCharChange;
 $('themeBtn').onclick=cycleTheme;applyTheme(getTheme());
+// ── Version chip: which build is open, and whether a newer one is live ──────────────────────────────────────────
+// Bump APP_VERSION (date; a same-day second release adds a letter: 2026.11.14b) and add a WHATS_NEW entry on every
+// release — tests/version-bump.js fails when index.html changed but the version didn't.
+// The check asks GitHub Pages for this same page (no cache) and compares the version written in it; nothing is sent.
+// It never reloads by itself: a reload ends the round being counted.
+const APP_VERSION='2026.11.14';
+const WHATS_NEW=[
+  {v:'2026.11.14',items:['ป้ายเวอร์ชันบนหัวเว็บ: บอกว่าเป็นเวอร์ชันล่าสุดไหม มีของใหม่กดโหลดได้เลย']},
+  {v:'2026.11.12',items:['ป้ายและเสียงเตือนเมื่อเก็บอุปกรณ์ (Equip) หรือสกรอลได้ พร้อมปุ่มปิดเสียงแยก',
+    'อ่านข้อความขวาล่างได้บนแมพพื้นสว่างหรือพื้นลาย เช่นหินที่ Free Market',
+    'ชื่อไอเทมที่เกมตัดเป็น "..." เติมชื่อเต็มจากของที่มอนในแมพนั้นดรอป',
+    'อ่าน % EXP ได้แม่นขึ้นตอนจุดหายหรือ % กลายเป็น "/"']},
+];
+const VER={latest:null,checked:false};
+function renderVer(){const c=$('vChip');if(!c)return;const nw=!!VER.latest;c.classList.toggle('new',nw);
+  c.textContent=nw?(active?'มีเวอร์ชันใหม่ · จบรอบก่อนค่อยกดโหลด':'มีเวอร์ชันใหม่ · กดเพื่อโหลด'):'v'+APP_VERSION+(VER.checked?' ✓ ล่าสุด':'');
+  c.title=nw?'เวอร์ชันใหม่ v'+VER.latest+' (ที่เปิดอยู่ v'+APP_VERSION+')':VER.checked?'เป็นเวอร์ชันล่าสุด · กดดูว่ามีอะไรใหม่':'ยังเช็กเวอร์ชันล่าสุดไม่ได้ · กดดูว่ามีอะไรใหม่';}
+async function checkVersion(){try{const u=location.href.split('#')[0].split('?')[0];const r=await fetch(u,{cache:'no-store'});if(!r.ok)throw 0;
+    const m=(await r.text()).match(/const APP_VERSION='([^']+)'/);if(!m)throw 0;VER.latest=m[1]>APP_VERSION?m[1]:null;VER.checked=true;}
+  catch{VER.checked=false;}renderVer();}
+function openVerDlg(){const nw=VER.latest;
+  $('vDlgBody').innerHTML=(nw?`<div class="vnew">มีเวอร์ชันใหม่ <b>v${esc(nw)}</b> (ที่เปิดอยู่ v${esc(APP_VERSION)})${active?'<br>กำลังนับรอบอยู่ — กด "✅ จบรอบ" ก่อน แล้วค่อยโหลด ไม่งั้นรอบนี้จะหาย':''}</div>`:'')
+    +WHATS_NEW.map(e=>`<h4>v${esc(e.v)}${e.v===APP_VERSION?' · ที่เปิดอยู่':''}</h4><ul>${e.items.map(i=>`<li>${esc(i)}</li>`).join('')}</ul>`).join('');
+  const rb=$('vReload');rb.hidden=!nw;rb.disabled=!!active;$('vDlg').showModal();}
+$('vChip').onclick=()=>{if(VER.latest&&!active)location.reload();else openVerDlg();};
+$('vReload').onclick=()=>{if(!active)location.reload();};$('vClose').onclick=()=>$('vDlg').close();
+renderVer();checkVersion();setInterval(checkVersion,30*60*1000);setInterval(renderVer,5000);
+document.addEventListener('visibilitychange',()=>{if(!document.hidden)checkVersion();});
+
 $('btnStart').onclick=()=>{if(!SW.validateAll())return;if(pipAutoOn()&&!PIP.isOpen())PIP.open();startSession();};$('btnCheck').onclick=checkpoint;$('btnEnd').onclick=()=>{if(EW.validateAll())endSession();};$('btnCancel').onclick=cancelSession;
 document.addEventListener('click',e=>{const s=e.target.closest('.shot');if(!s)return;const lb=$('lightbox');lb.querySelector('img').src=s.querySelector('img').src;lb.style.display='flex';});
 $('lightbox').onclick=()=>$('lightbox').style.display='none';
