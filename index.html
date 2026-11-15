@@ -1311,9 +1311,11 @@ const OCR=(()=>{
     {const tk=kind==='exp'?'exp':'meso';if(tplCount(tk)>=3)for(const v of V.list){
       if(kind==='exp'){const n=tplRead(tk,v.gNum),p=tplRead(tk,v.gPct);if(n&&p&&p.length>=3){const pc=+(p.slice(0,-2)+'.'+p.slice(-2));if(pc<=100)res.push({v,text:`tpl: ${n} [${pc}%]`,val:fromPct({exp:+n,pct:pc}),tpl:true});}}
       else{const m=tplRead(tk,v.gAll,true);if(m&&m.length>=1)res.push({v,text:'tpl: '+m,val:+m,tpl:true});}}
-      const t=res.filter(r=>r.tpl&&r.val!=null);
-      if(t.length>=2&&t.every(r=>same(kind,r.val,t[0].val))&&(kind!=='exp'||typeof EXP_REQ==='undefined'||fitsHint(t[0].val)))
-        return {best:t[0],raw:V.raw,tries:0,all:t.map(x=>x.v.tag+':'+x.text),agree:t.length+2,list:V.list,byTpl:true};}
+      // a clear majority of the template reads (≥2, at least twice the runner-up): one variant's odd glyph doesn't send it to Tesseract
+      const t=res.filter(r=>r.tpl&&r.val!=null),cnt=t.map(r=>t.filter(o=>same(kind,o.val,r.val)).length),top=Math.max(0,...cnt),bi=cnt.indexOf(top);
+      const second=Math.max(0,...t.filter(r=>bi>=0&&!same(kind,r.val,t[bi].val)).map(r=>t.filter(o=>same(kind,o.val,r.val)).length));
+      if(top>=2&&top>=2*second&&(kind!=='exp'||typeof EXP_REQ==='undefined'||fitsHint(t[bi].val)))
+        return {best:t[bi],raw:V.raw,tries:0,all:t.map(x=>x.v.tag+':'+x.text),agree:top+2,list:V.list,byTpl:true};}
     for(const v of V.list){let text,val,struct=false;
       if(kind==='exp'&&v.pctOnly&&v.pct){let pc=null;
         // raw-line mode (psm 13): the single-line mode drops a leading "5" in this font; digits only
