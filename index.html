@@ -948,11 +948,13 @@ async function startShare(){
   $('shareStatus').innerHTML='<span class="live-dot"></span>กำลังแชร์หน้าจอ — กด Next ไปตั้งกรอบอ่านตัวเลขได้เลย <span class="muted small" id="shareRes"></span>';
   // show the size the browser really captures: fewer pixels than the screen = smaller digits = worse reading
   video.addEventListener('loadedmetadata',()=>{const el=$('shareRes');if(el)el.textContent=`(ภาพ ${video.videoWidth}×${video.videoHeight})`;
-    setTimeout(async()=>{try{const o=await OCR.autoFind();if(o&&Object.keys(o).length){$('ocrHint').textContent=OCR.autoText(o);document.dispatchEvent(new CustomEvent('lb-regions',{detail:'auto'}));
-      if(OCR.hasRegions()&&!$('ocrOn').checked){$('ocrOn').checked=true;$('ocrOn').dispatchEvent(new Event('change'));}if(!active)setTimeout(detectAll,600);}}catch(e){}},700);},{once:true});setupAuto();$('ocrNeedShare').style.display='none';
-  if(OCR.hasAny()){$('shareStatus').innerHTML='<span class="live-dot"></span>กำลังแชร์หน้าจอ — ใช้กรอบที่ตั้งไว้ครั้งก่อน อ่านข้อมูลให้แล้วด้านล่าง';
-    if(OCR.hasRegions()&&!$('ocrOn').checked){$('ocrOn').checked=true;$('ocrOn').dispatchEvent(new Event('change'));}
-    if(!active)setTimeout(detectAll,900);}
+    // every share is analysed from scratch (Harry: "it should analyse again every time") — boxes, then name / level / map / numbers
+    setTimeout(async()=>{let o=null;try{o=await OCR.autoFind(false,true);}catch(e){}
+      if(o&&Object.keys(o).length){$('ocrHint').textContent=OCR.autoText(o);document.dispatchEvent(new CustomEvent('lb-regions',{detail:'auto'}));}
+      const st=$('shareStatus');if(st)st.innerHTML=`<span class="live-dot"></span>กำลังแชร์หน้าจอ — ${o&&Object.keys(o).length?'หากรอบจากจอนี้ใหม่แล้ว':OCR.hasAny()?'หากรอบไม่เจอ ใช้กรอบที่ตั้งไว้ครั้งก่อน':'หากรอบไม่เจอ — กด Next ไปตั้งกรอบเอง'} <span class="muted small" id="shareRes">(ภาพ ${video.videoWidth}×${video.videoHeight})</span>`;
+      if(OCR.hasRegions()&&!$('ocrOn').checked){$('ocrOn').checked=true;$('ocrOn').dispatchEvent(new Event('change'));}
+      if(!active&&OCR.hasAny())setTimeout(detectAll,600);},700);},{once:true});setupAuto();$('ocrNeedShare').style.display='none';
+  $('shareStatus').innerHTML='<span class="live-dot"></span>กำลังแชร์หน้าจอ — กำลังหากรอบจากจอ… <span class="muted small" id="shareRes"></span>';
 }
 function stopShare(){
   if(stream)stream.getTracks().forEach(t=>t.stop());stream=null;video.srcObject=null;$('screenBlock').classList.add('nostream');OCR.stop();$('ocrOn').checked=false;
@@ -1413,6 +1415,7 @@ const OCR=(()=>{
   const lev=(a,b)=>{a=a.toLowerCase();b=b.toLowerCase();const d=Array.from({length:a.length+1},(_,i)=>[i]);for(let j=1;j<=b.length;j++)d[0][j]=j;
     for(let i=1;i<=a.length;i++)for(let j=1;j<=b.length;j++)d[i][j]=Math.min(d[i-1][j]+1,d[i][j-1]+1,d[i-1][j-1]+(a[i-1]===b[j-1]?0:1));return d[a.length][b.length];};
   const near=(a,b)=>lev(a,b)<=(b.length>=7?2:b.length>=4?1:0);
+  const nameKey=t=>String(t).toLowerCase().replace(/rn/g,'m').replace(/[l1|!]/g,'i').replace(/0/g,'o').replace(/5/g,'s');
   // what the HUD may show → our job / branch
   const JOB_WORDS=[['Beginner',null,null],['Warrior','warrior',null],['Fighter','warrior','Fighter'],['Page','warrior','Page'],['Spearman','warrior','Spearman'],
     ['Magician','magician',null],['Cleric','magician','Cleric'],['Wizard','magician',null],['Thief','thief',null],['Assassin','thief','Assassin'],['Bandit','thief','Bandit'],
@@ -1427,8 +1430,10 @@ const OCR=(()=>{
       for(const tk of toks){const j=JOB_WORDS.find(([w])=>near(tk,w));if(j){jobHit=j;break;}}
       if(jobHit){let br=jobHit[2];if(jobHit[0]==='Wizard')br=/fire|poison|f\s*\/\s*p/i.test(t)?'F/P Wizard':/ice|light|i\s*\/\s*l/i.test(t)?'I/L Wizard':null;add('job',jobHit[1]+'|'+(br||''));}
       for(const tk of toks){if(/^\d+$/.test(tk)||/^l?v$/i.test(tk)||JOB_WORDS.some(([w])=>near(tk,w))||tk.length>13)continue;
-        let k=known.find(c=>near(tk,c.name));
-        for(let n=Math.min(tk.length,5);!k&&n>=3;n--){const end=tk.toLowerCase().slice(-n);const part=known.filter(c=>c.name.toLowerCase().endsWith(end));if(part.length===1)k=part[0];}
+        // a saved character only when the name on screen IS that name (up to look-alike glyphs Tesseract mixes up: l/I/1, O/0, rn/m):
+        // no "close enough" and no matching the end of a longer name — THANAKRIZ is not TNAKRIZ (Harry: analyse afresh every time,
+        // anyone may use this page)
+        const k=known.find(c=>nameKey(tk)===nameKey(c.name));
         add('name',k?k.name:tk);}
     }
     const best=k=>{let b=null,n=0;for(const [key,c] of vote)if(key.startsWith(k+':')&&c>n){n=c;b=key.slice(k.length+1);}return b;};
@@ -1686,13 +1691,17 @@ const OCR=(()=>{
     if(P>=145)return {ok:true,text:`ภาพ ${W}×${H} · ตัวเลขในเกมใหญ่พอ อ่านได้แม่น ✓`};
     if(P>=120)return {ok:true,warn:true,text:`ภาพ ${W}×${H} · ตัวเลขค่อนข้างเล็ก อาจอ่านพลาดบ้าง — ขยายหน้าต่างเกมให้ใหญ่ขึ้นจะดีกว่า`};
     return {ok:false,text:`ภาพ ${W}×${H} · ตัวเลขในเกมเล็กเกินไป อ่านพลาดง่าย — ขยายหน้าต่างเกม (แนะนำกว้าง 1920 ขึ้นไป แบบหน้าต่าง ไม่เต็มจอ) · Windows Scale 100% · ตอนแชร์ เลือก "หน้าต่าง" เกม`};}
-  async function autoFind(force=false){
+  // fresh=true (every new screen share, and the "🔍 หากรอบใหม่" button): analyse the screen from scratch — every box the screen
+  // shows is found again, hand-drawn ones included (the window may have moved, the resolution changed, or it is someone else's
+  // screen). A box that can't be found keeps the old one.
+  async function autoFind(force=false,fresh=false){
     if(!stream||!video.videoWidth||isBlack())return null;const out={};
-    if(force){auto.src={};auto.anchor=null;AFC.anchor=null;}
+    if(force||fresh){auto.src={};auto.anchor=null;AFC.anchor=null;}
+    const can=k=>fresh||isAuto(k)||!regions[k];
     const hu=findHud();
-    if(hu){auto.hud={P:hu.P,W:hu.W,H:hu.H,Rs:hu.Rs,Bs:hu.Bs,y:hu.y};for(const k of ['who','exp'])if(isAuto(k)||!regions[k]){const b=hudBox(hu,k);if(b){regions[k]=b;auto.src[k]='auto';out[k]=true;}}}
-    if(isAuto('map')||!regions.map){const m=locateMap(hu);if(m){regions.map=m;auto.src.map='auto';out.map=true;}}
-    if(isAuto('meso')||!regions.meso){const m=locateMeso(hu);if(m){regions.meso=m;auto.src.meso='auto';out.meso=true;mesoOff=false;st.mesoHidden=null;}}
+    if(hu){auto.hud={P:hu.P,W:hu.W,H:hu.H,Rs:hu.Rs,Bs:hu.Bs,y:hu.y};for(const k of ['who','exp'])if(can(k)){const b=hudBox(hu,k);if(b){regions[k]=b;auto.src[k]='auto';out[k]=true;}}}
+    if(can('map')){const m=locateMap(hu);if(m){regions.map=m;auto.src.map='auto';out.map=true;}}
+    if(can('meso')){const m=locateMeso(hu);if(m){regions.meso=m;auto.src.meso='auto';out.meso=true;mesoOff=false;st.mesoHidden=null;}}
     if(Object.keys(out).length){await put('kv',regions,'ocrRegions');await put('kv',{w:video.videoWidth,h:video.videoHeight},'ocrRegionsSize');st.q.relocate++;}
     await put('kv',auto,'ocrAuto');drawBoxes();return out;}
   const autoText=o=>{if(!o)return '';const y=k=>o[k]||regions[k]?'✓':'—';
@@ -2287,7 +2296,7 @@ renderLog();render();$('ocrHint').textContent='↺ เริ่มนับใ�
     for(const x of V.list){if(x.pctOnly&&x.gPct&&x.pctInt!=null&&x.gPct.length===ds.length&&x.pctInt===ds.length-2)await tplLearn('pct',x.gPct,ds);}},
   // the value the player typed teaches the shapes only when Tesseract reads nearly the same number right now — at most two digits
   // lost or changed, as with tiny digits; a typo or a box that shows something else would map the wrong digits to these glyphs
-  learnMeso:async v=>{if(!stream||!regions.meso||v==null)return;const r=await readNow();if(!r.listMeso||r.meso==null||/แม่แบบ|^tpl/.test(r.rawMeso||'')||editDist(String(r.meso),String(v))>2)return;const dm=String(v);for(const x of r.listMeso){const g=alignGlyphs(x.gAll,dm.length);if(g)await tplLearn('meso',g,dm);}},_tpl:()=>TPL,_tplLearn:tplLearn,_levelCanvases:()=>levelCanvases(regions.who).map(c=>c.toDataURL()),_fromPct:v=>fromPct(v),_titlePrint:titlePrint,_printSim:printSim,_variants:k=>{const V=variants(regions[k]);return V?V.list.map(v=>({tag:v.tag,count:v.count,modeH:v.modeH,img:v.canvas.toDataURL()})):null;},hasRegions:()=>!!(regions.exp||regions.meso),hasAny:()=>Object.values(regions).some(Boolean),has:k=>!!regions[k],readWho,readMap,_readNow:readNow,reset:()=>{reset();render();},snapshot:()=>({expGained:st.expGained,mesoCollected:st.mesoCollected,t0:st.t0,quality:{...st.q,mesoEst:st.q.mesoEst.slice(-20),rateHr:Math.round(expRate()||0),mesoExtra:Math.round(mesoExtra()),auto:{...auto.src}}}),autoFind,autoText,setMap,_findHud:findHud,_locateMeso:()=>locateMeso(auto.hud),_mesoVisible:mesoVisible,_auto:()=>auto,_mesoExtra:mesoExtra,_seek:seekMeso,_learnAnchor:learnMesoAnchor,_mesoOff:()=>mesoOff,_setMesoOff:v=>{mesoOff=!!v;st.mesoHidden=v?Date.now():null;},_setRegion:(k,v)=>{regions[k]=v;},_live:()=>live(),msgState:()=>st.msg,setMsgOn:v=>{msgOn=!!v;if(timer){if(msgOn)msgStart();else msgStop();}},_msgScan:()=>msgScan(),_msgTick:async()=>{const t0=timer;timer=timer||1;try{await msgTick();}finally{timer=t0;}},_msgParse:msgParse,_msgFill:()=>msgFill,_msgReset:(prime)=>{msgPrev=prime?null:[];msgCache=[];st.msg={exp:0,party:0,kills:0,meso:0,items:{},log:[],mesoAtSeen:0};},_ensureW:()=>ensure(),sizeCheck,readChat,_variantsOf:r=>variants(r),_tplSim:(a,b)=>tplSim(a,b),_relevel:relevel,autofill,_learnLevel:learnLevel,_readLevelDigits:async()=>readLevelDigits(await ensure()),learnLevel,_variants:k=>variants(regions[k]),_readRegion:async k=>readRegion(await ensure(),k),_render:()=>render(),stop,drawBoxes,_parseExp:parseExp,_parseMeso:parseMeso,_st:st,_accExp:acceptExp,_reqNow:reqNow,_accMeso:acceptMeso,_repairExp:v=>repairExp(v),_fitLevels:fitLevels,_setHint:h=>{levelHint=h;},_misses:()=>misses,_keepMiss:keepMiss};
+  learnMeso:async v=>{if(!stream||!regions.meso||v==null)return;const r=await readNow();if(!r.listMeso||r.meso==null||/แม่แบบ|^tpl/.test(r.rawMeso||'')||editDist(String(r.meso),String(v))>2)return;const dm=String(v);for(const x of r.listMeso){const g=alignGlyphs(x.gAll,dm.length);if(g)await tplLearn('meso',g,dm);}},_tpl:()=>TPL,_tplLearn:tplLearn,_levelCanvases:()=>levelCanvases(regions.who).map(c=>c.toDataURL()),_fromPct:v=>fromPct(v),_titlePrint:titlePrint,_printSim:printSim,_variants:k=>{const V=variants(regions[k]);return V?V.list.map(v=>({tag:v.tag,count:v.count,modeH:v.modeH,img:v.canvas.toDataURL()})):null;},hasRegions:()=>!!(regions.exp||regions.meso),hasAny:()=>Object.values(regions).some(Boolean),has:k=>!!regions[k],readWho,readMap,_readNow:readNow,reset:()=>{reset();render();},snapshot:()=>({expGained:st.expGained,mesoCollected:st.mesoCollected,t0:st.t0,quality:{...st.q,mesoEst:st.q.mesoEst.slice(-20),rateHr:Math.round(expRate()||0),mesoExtra:Math.round(mesoExtra()),auto:{...auto.src}}}),autoFind,autoText,setMap,_findHud:findHud,_locateMeso:()=>locateMeso(auto.hud),_mesoVisible:mesoVisible,_auto:()=>auto,_mesoExtra:mesoExtra,_seek:seekMeso,_learnAnchor:learnMesoAnchor,_mesoOff:()=>mesoOff,_setMesoOff:v=>{mesoOff=!!v;st.mesoHidden=v?Date.now():null;},_setRegion:(k,v)=>{regions[k]=v;},_live:()=>live(),msgState:()=>st.msg,setMsgOn:v=>{msgOn=!!v;if(timer){if(msgOn)msgStart();else msgStop();}},_msgScan:()=>msgScan(),_msgTick:async()=>{const t0=timer;timer=timer||1;try{await msgTick();}finally{timer=t0;}},_msgParse:msgParse,_msgFill:()=>msgFill,_msgReset:(prime)=>{msgPrev=prime?null:[];msgCache=[];st.msg={exp:0,party:0,kills:0,meso:0,items:{},log:[],mesoAtSeen:0};},_ensureW:()=>ensure(),sizeCheck,readChat,_variantsOf:r=>variants(r),_tplSim:(a,b)=>tplSim(a,b),_relevel:relevel,autofill,_learnLevel:learnLevel,_readLevelDigits:async()=>readLevelDigits(await ensure()),learnLevel,_variants:k=>variants(regions[k]),_readRegion:async k=>readRegion(await ensure(),k),_render:()=>render(),stop,drawBoxes,_parseExp:parseExp,_parseMeso:parseMeso,_st:st,_accExp:acceptExp,_reqNow:reqNow,_accMeso:acceptMeso,_repairExp:v=>repairExp(v),_fitLevels:fitLevels,_setHint:h=>{levelHint=h;},_misses:()=>misses,_keepMiss:keepMiss,_parseWho:parseWho};
 })();
 
 // two taps within 3 s → start counting again from what is on screen now (regions are kept)
@@ -2648,6 +2657,8 @@ async function detectWho(){
   box.innerHTML='⏳ กำลังอ่านชื่อและเลเวลจากจอ…';
   let r;try{r=await OCR.readWho(characters);}catch(e){box.innerHTML='⚠️ '+esc(e.message);return;}
   if(!r||(!r.name&&!r.level)){box.innerHTML=`⚠️ อ่านชื่อจากจอไม่ได้ — เลือกตัวละครเองได้เลย${r?.raw?` <span class="muted small">(อ่านได้: ${esc(r.raw)})</span>`:''}`;return;}
+  // the same name with another job, or a level below the one saved for it, is somebody else's character (or a new one): fill it in as new
+  if(r.char&&((r.job&&r.char.job&&r.job!==r.char.job)||(r.level&&r.char.last?.level&&r.level<r.char.last.level))){r.char=null;}
   whoSeen=r;const bits=[r.name&&`<b>${esc(r.name)}</b>`,r.branch||(r.job&&jobOf(r.job)?.name),r.level&&`Lv.${r.level}`].filter(Boolean).join(' · ');
   if(r.char){$('s_char').value=r.char.id;onCharChange();
     if(r.branch&&!r.char.branch&&jobOf(r.char.job)?.branches.includes(r.branch)){r.char.branch=r.branch;await saveChars();renderCharCards();}
@@ -2722,9 +2733,12 @@ async function detectAll(){
       ${row('เงิน',r?.meso!=null?`${pic(r.imgMeso)}${fmt(r.meso)} mesos${r.mesoFar?` <span class="muted small">(ห่างจากรอบก่อน ${fmt(r.mesoFar)} มาก)</span>`:''}`:null,r?.mesoSure!==false)}</div>
       <div class="row" style="margin-top:10px">${need.length
         ?`<button type="button" class="btn sm" id="detGo">ตรวจส่วนที่เหลือ →</button>`
-        :`<button type="button" class="btn sm" id="detGo">✔ ถูกต้อง ไปเลือกยาเลย</button>`}<button type="button" class="btn ghost sm" id="detAgain">อ่านใหม่</button>
+        :`<button type="button" class="btn sm" id="detGo">✔ ถูกต้อง ไปเลือกยาเลย</button>`}<button type="button" class="btn ghost sm" id="detAgain">อ่านใหม่</button><button type="button" class="btn ghost sm" id="detFind" title="หากรอบ EXP เงิน ชื่อ/เลเวล และแมพ จากจอตอนนี้ใหม่ทั้งหมด แล้วอ่านอีกครั้ง">🔍 หากรอบใหม่</button>
       <span class="muted small">${need.length?'บางค่ายังไม่ได้/ไม่แน่ใจ จะพาไปเฉพาะขั้นนั้น':'ไม่ตรง? กด Next ไปตรวจทีละขั้นได้'}</span></div>`;
     $('detGo').onclick=()=>SW.goKey(need[0]||'items');$('detAgain').onclick=()=>{whoSeen=null;mapSeen=null;detectAll();};
+    $('detFind').onclick=async()=>{const b=$('detFind');b.disabled=true;b.textContent='⏳ กำลังหา…';let o=null;try{o=await OCR.autoFind(false,true);}catch(e){}
+      if(o&&Object.keys(o).length){$('ocrHint').textContent=OCR.autoText(o);document.dispatchEvent(new CustomEvent('lb-regions',{detail:'auto'}));}
+      whoSeen=null;mapSeen=null;await detectAll();if(!o||!Object.keys(o).length){const n=document.createElement('p');n.className='warn small';n.textContent='⚠️ หากรอบจากจอไม่เจอ — ให้เห็นหน้าต่างเกมทั้งหมด (แถบ HP/MP ด้านล่าง และกระเป๋าที่มีช่องเงิน) แล้วลองอีกครั้ง หรือกด Next ไปตั้งกรอบเอง';$('detectAll').prepend(n);}};
   }catch(e){box.innerHTML=`<p class="bad small">⚠️ ${esc(e.message)}</p>`;}
 }
 
@@ -3098,8 +3112,11 @@ $('themeBtn').onclick=cycleTheme;applyTheme(getTheme());
 // release — tests/version-bump.js fails when index.html changed but the version didn't.
 // The check asks GitHub Pages for this same page (no cache) and compares the version written in it; nothing is sent.
 // It never reloads by itself: a reload ends the round being counted.
-const APP_VERSION='2026.11.15c';
+const APP_VERSION='2026.11.16';
 const WHATS_NEW=[
+  {v:'2026.11.16',items:['แชร์จอทุกครั้ง ระบบหากรอบจากจอใหม่หมด (รวมกรอบที่ตั้งเอง) — เปลี่ยนเครื่อง ย้ายหน้าต่าง หรือคนอื่นใช้ ก็อ่านถูก',
+    'หน้าแรกมีปุ่ม 🔍 หากรอบใหม่ ข้างปุ่มอ่านใหม่',
+    'ตัวละคร: ใช้ชื่อบนจอตรง ๆ ไม่เดาจากชื่อคล้าย — ชื่อเดียวกันแต่อาชีพต่างหรือเลเวลต่ำกว่าเดิม ถือเป็นตัวใหม่']},
   {v:'2026.11.15c',items:['หน้าต่างลอย: นาฬิกาเวลาจริง 🌐 มุมซ้ายบน บอกโซนเวลาด้วย (ตามเครื่องที่เปิดอยู่) · แถบเล็กอยู่หน้าสุด']},
   {v:'2026.11.15b',items:['Meso: แก้อ่านได้เลขสั้นผิด ๆ (17, 222, 303) — แม่แบบตัวเลขที่จำผิดถูกล้างและเรียนใหม่แบบเข้มขึ้น ตอนเริ่มรอบอ่านด้วยตัวอ่านปกติเสมอ']},
   {v:'2026.11.15',items:['ป้ายเวอร์ชันบนหัวเว็บ: บอกว่าเป็นเวอร์ชันล่าสุดไหม มีของใหม่กดโหลดได้เลย',
