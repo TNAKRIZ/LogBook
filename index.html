@@ -199,7 +199,8 @@ video{width:100%;background:#000;border-radius:10px;aspect-ratio:16/9;object-fit
 .stale{border:2px solid #d9661a;background:#fff3e2}.stale .row{margin-top:8px}
 .chatbox{margin-top:12px;padding-top:10px;border-top:1px dashed var(--line,#e2cfa8)}.chatbox h3{margin:0 0 8px;font-size:15px}
 .chatlist{list-style:none;margin:8px 0 0;padding:0;max-height:320px;overflow:auto}.chatlist li{padding:6px 0;border-bottom:1px solid var(--line,#eadcc0)}
-.chatlist .who{font-weight:700}.chatlist .orig{color:var(--muted,#8a7a66);font-size:13px}.chatlist .th{font-size:15px}
+.nocost{display:inline-block;margin-top:3px;font-size:11px;font-weight:700;padding:1px 7px;border-radius:9px;background:#f5c21b33;color:var(--ink);border:1px solid #f5c21b88}
+.chatlist .who{font-weight:700}.chatlist .ch{font-size:11px;font-weight:700;padding:0 5px;border-radius:8px;background:var(--line,#eadcc0);margin-left:4px}.chatlist .msg{font-size:15px;word-break:break-word}.chatlist .orig{color:var(--muted,#8a7a66);font-size:13px}.chatlist .th{font-size:15px}
 .quitbar{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}.quitbar[hidden]{display:none}
 .ckpt summary{cursor:pointer;list-style:revert}.ckpt[open] summary{margin-bottom:8px}
 .stat .v{font-size:20px;font-weight:700;overflow-wrap:anywhere;font-family:var(--num)}
@@ -308,10 +309,11 @@ footer a{color:inherit}
         <div class="row small muted" id="ocrPeek" style="margin-top:6px"></div>
       </div>
       <div class="chatbox" id="chatBox">
-        <h3>💬 แปลแชทในเกม</h3>
-        <div class="row"><button class="btn sm" id="chatGo" type="button">💬 แปลแชทตอนนี้</button>
-          <label class="small"><input type="checkbox" id="chatAuto"> แปลเองทุก 10 วิ</label></div>
-        <p class="muted small" id="chatNote" style="margin:6px 0 0">อ่านช่องแชทด้านล่างจอแล้วแปลเป็นไทย — แปลในเครื่อง (Chrome) ข้อความไม่ถูกส่งไปไหน · อังกฤษ / เกาหลี</p>
+        <h3>💬 แชทในเกม</h3>
+        <div class="row"><button class="btn sm" id="chatGo" type="button">💬 อ่านแชทตอนนี้</button>
+          <label class="small"><input type="checkbox" id="chatAuto"> อ่านเองทุก 5 วิ</label>
+          <input id="chatFind" type="search" placeholder="ค้นหา เช่น Work Gloves" style="flex:1;min-width:140px;max-width:240px"></div>
+        <p class="muted small" id="chatNote" style="margin:6px 0 0">เก็บประกาศที่หลุดจอไว้ให้อ่านย้อนหลัง · ภาษาอังกฤษแสดงตามเดิม (ศัพท์เทรดแปลแล้วเพี้ยน) · เกาหลี / จีน / ญี่ปุ่น แปลเป็นไทยในเครื่อง (Chrome) ข้อความไม่ถูกส่งไปไหน</p>
         <ul class="chatlist" id="chatList"></ul>
       </div>
     </div>
@@ -909,6 +911,9 @@ function calc(s){
   const exp=e?expGained(s.start,e):null;
   const potions=[];let boughtSpend=0,potionCost=0,gainedValue=0;
   for(const [id,v] of Object.entries(s.items||{})){
+    if(v.used!=null&&v.start==null){   // entered as "used N bottles" at the end (nothing ticked at the start)
+      const p=priceFor(s,id),bought=v.bought||0,row={id,name:itemOf(id)?.name||id,cat:itemOf(id)?.cat||'',start:null,bought,end:null,used:v.used,gained:0,cost:v.used*(p.shop||0),value:0};
+      boughtSpend+=bought*(p.shop||0);potionCost+=row.cost;potions.push(row);continue;}
     if(v.start==null||v.end==null)continue;
     const p=priceFor(s,id);const bought=v.bought||0;
     const delta=v.end-v.start-bought;
@@ -1121,32 +1126,36 @@ const OCR=(()=>{
     const isBr=nAcc>=1&&nAcc<=3&&live.length-nAcc>=2?isAccent:isTallNarrow;
     const br=live.findIndex((c,i)=>i>=2&&isBr(c));
     let num=null,pct=null,pctOnly=false,pctInt=null,pctDigits=null,pctGl=null;
+    // the glyphs of the % between the brackets → exactly its digits (the "%" sign left out, so it can't be read as a 7,
+    // and spread apart, so touching glyphs can't hide one another). Used for "[58.03%]" alone and after "177,881 [6.60%]".
+    function pctStruct(body,ds){
+      if(ds.length===1){const k=body.filter(c=>c.x1<ds[0].x0).length;   // with the dot found: k digits before it, 2 after it
+        if((k===1||k===2)&&body.length>=k+2){pctInt=k;pctDigits=paintSpaced(body.slice(0,k+2));pctGl=body.slice(0,k+2);}}
+      else if(!ds.length&&(body.length===4||body.length===5)){
+        // the dot was lost in the cut (it is 1–2 px): the last glyph is the "%", so 3 or 4 digits with 2 decimals —
+        // and the dot's place is the widest gap between them; both must agree
+        const dg=body.slice(0,-1),k=dg.length-2,gaps=dg.slice(1).map((c,i)=>c.x0-dg[i].x1),wide=gaps.indexOf(Math.max(...gaps));
+        if(wide===k-1&&gaps[wide]>=Math.max(2,1.4*[...gaps].sort((a,b)=>a-b)[gaps.length>>1])){pctInt=k;pctDigits=paintSpaced(dg);pctGl=dg;}}}
     // above 1,000,000 EXP the game shows only "[58.03%]": the OPENING bracket is the first glyph, so everything up to the
     // closing bracket is the percentage — not a number followed by a bracket. The dot's position says how many digits
     // come before it (1 or 2), so a dropped dot or a "%" read as a digit can't move the decimal point.
     // when the brackets lose their colour in the cut (and are no taller than the digits), a thin glyph at both ends of a
     // short line is still "[ … ]" — the game prints nothing else there
     const thin=c=>c.w<=c.h*0.5,edgeBr=live.length>=6&&thin(live[0])&&thin(live[live.length-1])&&!live.slice(1,-1).every(thin);
-    const isB=c=>isBr(c)||(edgeBr&&(c===live[0]||c===live[live.length-1]));
+    // …but not when a green bracket opens in the MIDDLE of the line: then a number comes first, and a thin first glyph is its "1"
+    // ("177,881 [6.60%]"), not "[". A green bracket only at the end (the opening one lost its colour) still allows it.
+    const midAcc=isBr===isAccent&&live.some((c,i)=>i>=2&&i<live.length-1&&isAccent(c));
+    const isB=c=>isBr(c)||(!midAcc&&edgeBr&&(c===live[0]||c===live[live.length-1]));
     {const open=live.findIndex(isB);
       if(open>=0&&open<=1&&live.slice(0,open).every(c=>c.h>mh*1.1||c.w<=c.h*0.6)){
         const inner=live.slice(open+1),cl=inner.findIndex(isB),body=cl>=0?inner.slice(0,cl):inner;
         if(body.length>=3){const xEnd=cl>=0?inner[cl].x0:1e9,ds=dots.filter(d=>d.x0>live[open].x1&&d.x1<xEnd);
-          pct=paint([...body,...ds]);pctOnly=true;
-          if(ds.length===1){const k=body.filter(c=>c.x1<ds[0].x0).length;
-            // with the dot found, the digits are exactly: k before it, 2 after it — paint only those, spread apart
-            // (the "%" is left out, so it can't be read as a 7, and touching glyphs can't hide one another)
-            if((k===1||k===2)&&body.length>=k+2){pctInt=k;pctDigits=paintSpaced(body.slice(0,k+2));pctGl=body.slice(0,k+2);}}
-          else if(!ds.length&&(body.length===4||body.length===5)){
-            // the dot was lost in the cut (it is 1–2 px): the last glyph is the "%", so 3 or 4 digits with 2 decimals —
-            // and the dot's place is the widest gap between them; both must agree
-            const dg=body.slice(0,-1),k=dg.length-2,gaps=dg.slice(1).map((c,i)=>c.x0-dg[i].x1),wide=gaps.indexOf(Math.max(...gaps));
-            if(wide===k-1&&gaps[wide]>=Math.max(2,1.4*[...gaps].sort((a,b)=>a-b)[gaps.length>>1])){pctInt=k;pctDigits=paintSpaced(dg);pctGl=dg;}}}}}
+          pct=paint([...body,...ds]);pctOnly=true;pctStruct(body,ds);}}}
     if(br>0&&!pctOnly){const b=live[br];num=paint(live.slice(0,br));
       const after=live.slice(br+1),close=after.findIndex(isBr);
       const rest=close>=0?after.slice(0,close):after;                                      // stop at the closing bracket
-      const xEnd=close>=0?after[close].x0:1e9;
-      pct=paint([...rest,...dots.filter(d=>d.x0>b.x1&&d.x1<xEnd)]);}
+      const xEnd=close>=0?after[close].x0:1e9,ds=dots.filter(d=>d.x0>b.x1&&d.x1<xEnd);
+      pct=paint([...rest,...ds]);pctStruct(rest,ds);}
     const box={x0:Math.min(...live.map(c=>c.x0)),x1:Math.max(...live.map(c=>c.x1)),y0:Math.min(...live.map(c=>c.y0)),y1:Math.max(...live.map(c=>c.y1))};
     // glyph shapes for the digit templates: 8×12 grid of each glyph's own pixels + its width/height
     // small captures make neighbouring digits touch ("37" as one blob): split a glyph that is as wide as several digits
@@ -1167,7 +1176,7 @@ const OCR=(()=>{
     const shapes=list=>list.flatMap(pieces).map(shape);
     let gNum=null,gPct=null;
     if(pctOnly&&pctGl)gPct=shapes(pctGl);                                        // the % digits alone (no dot, no % sign)
-    if(br>0&&!pctOnly){gNum=shapes(live.slice(0,br));const after=live.slice(br+1),close=after.findIndex(isBr);gPct=shapes(close>=0?after.slice(0,close):after);}
+    if(br>0&&!pctOnly){gNum=shapes(live.slice(0,br));const after=live.slice(br+1),close=after.findIndex(isBr);gPct=pctGl?shapes(pctGl):shapes(close>=0?after.slice(0,close):after);}   // the % digits only when the layout found them
     const gAll=shapes(live);
     return {canvas:paint(live),num,pct,pctOnly,pctInt,pctDigits,count:live.length,modeH,box,W,H,gNum,gPct,gAll};
   }
@@ -1208,7 +1217,7 @@ const OCR=(()=>{
   const tplSim=(g,t)=>{let both=0,any=0;for(let i=0;i<g.b.length;i++){const p=g.b[i]==='1',q=t.b[i]==='1';if(p&&q)both++;if(p||q)any++;}
     return (any?both/any:0)-Math.min(0.3,Math.abs(g.a-t.a)*0.8);};
   // the HUD % digits, cut from Harry's real screens at several sizes (tools/build_pct_tpl.js) — a head start before this player's own
-  const BUILTIN_TPL={pct:{"0":[{"b":"001111000111111011100011110000111100001111000011110000111100001111000011110000110111111000111100","a":0.71},{"b":"001111000111111011000011110000111100001111000011110000111100001111000011110000110111111000111100","a":0.77},{"b":"001111100111111011111111110000111100001111000011110000111100001111000011111111110111111000111100","a":0.71},{"b":"001111000111111011111111110000111100001111000011110000111100001111000011110000110111111000111100","a":0.71},{"b":"001111000111111011111111110000111100001111000011110000111100001011000010110000100111111000111100","a":0.71},{"b":"011111101111111111000011110000111100001111000011110000111100001111000011110000111111111101111110","a":0.67},{"b":"001111000111111011110011110000111100001111000011110000111100001111000011111000110111111000111100","a":0.73},{"b":"011111001111111111000011110000111100001111000011110000111100001111000011110000111111111101111100","a":0.73}],"2":[{"b":"001111000111111011100011110000110000001100000110000011000001100000111000011100001111111111111111","a":0.71},{"b":"001111000111111011111111110000110000001100000110000011100001100000111000011100001111111111111111","a":0.71},{"b":"001111000111111011000011110000110000001100000110000011000001100000110000001000001111111111111111","a":0.71},{"b":"001111100011111011111111110000110000001100000110000011100001100000111000011101101111111111111111","a":0.71},{"b":"001111100011111011111111110000110000001100000110000011100001100000111000011000001111111111111110","a":0.71},{"b":"001111000111111011111111110000110000001100000110000011100001110000111000001100000111111101111111","a":0.77},{"b":"001111000111111011111111110000110000001100000110000011000001100000110000001100000111111001111110","a":0.74},{"b":"001111001111111011000111000001110000011100000110000011000001100000010000001100000111111011111111","a":0.82}],"3":[{"b":"001111000111111011100011110000110000001100011110000111100000001100000011110000110111111000111100","a":0.71},{"b":"001111100011111011111111110000110000001100011110000111100000001100000011111100110111111000111110","a":0.71},{"b":"001111000111111011110111110000110000001100011110000111100000001111000011110000110111111000111100","a":0.71},{"b":"001111000011111011111111110000110000001100011110000111100000001100000011110000110111111000111100","a":0.71},{"b":"001111000011111001111111110000110000001100001111000111100000011101000011111000110111111000111100","a":0.77},{"b":"001111000111111011100011010000110000001100001110000111100000001100000011110000110111111000111100","a":0.76},{"b":"001111000111111011000011000000110000001100011111000111100000111100000011110000110111111000111100","a":0.75},{"b":"001111000111111011110111110000110000001100001110000011100000001101000011011000110111111000111100","a":0.77}],"4":[{"b":"000001000000111000011110001111100011011001100110110011101111111101111111000001100000011000000100","a":0.71},{"b":"000001000000111000011110001111100111111011000110110011101111111111111110000011100000111000000100","a":0.69},{"b":"000001000000111000011110001111100010011011000110110011101111111111111110000011100000111000000100","a":0.71},{"b":"000001000000111000011110001111100011011011000110110001101111111111111111000001100000011000000110","a":0.64},{"b":"000001000000111000011110001111100011111011101110111011101111111101111110000011100000111000000100","a":0.74},{"b":"000001100000111000011110001111100110011011000110110001101111111101111111000001100000011000000100","a":0.68},{"b":"000001000000111000011110001111100011011011100110111011101111111111111111000001100000011000000110","a":0.71},{"b":"000001100000111000011110001111100111111011001110110011101111111111111111000011100000111000000110","a":0.71}],"5":[{"b":"011111111111111111100000110000001100000001111100001111100000001101000011110000110111111000111100","a":0.71},{"b":"111111111111111111000000110000001100000001111100001111100000001100000011110000110111111000111100","a":0.77},{"b":"011111101111111101111110010000000100000001111110001111100000001100000011011110110111111000111100","a":0.79},{"b":"111111111111111111101110110000001100000001111100001111100000001101000011110000110111111000111100","a":0.76},{"b":"111111101111111111111110110000001100000001111100001111100000001000000010110000100111111000111100","a":0.71},{"b":"111111111111111111101110110000001100000001111100001111100000001111000011111000110111111000111100","a":0.73},{"b":"111111111111111111000000110000001100000001111100001111100000001100000011110000110111111000111110","a":0.72},{"b":"111111111111111011000000110000001111100011111100001111100011111000000011110000111111111000111100","a":0.75}],"6":[{"b":"001111000111111011000011110000111100000011111100111111101100001111000011110000110111111000111100","a":0.71},{"b":"001111100011111001111111111000010110000001111100011111100110001101100011011000110111111100111110","a":0.71},{"b":"001111000111111011100111110000111100000011111100111111101110001111000011111000110111111000111100","a":0.74},{"b":"001111000111111011111111110000111100000011111100111111101100001011000010111111100111111000111100","a":0.79},{"b":"001111000011111011101111110000111100000011111100111111101100001111000011110000110111111000111100","a":0.72},{"b":"001111000011111011111111110000111100000011111100111111101110001111000011111000110111111000111100","a":0.73},{"b":"001111000111111011111111110000111100000011111100111111101100001111000011110000110111111000111110","a":0.53},{"b":"001111000111111011100011110000001100000011111100111111101110001111000011110000110111111000111100","a":0.75}],"8":[{"b":"001111000111111011100011110000111100001101111110011111101100001111000011110000110111111000111100","a":0.71},{"b":"001111000111111011000011110000111100001101111110011111101100001111000011110000110111111000111100","a":0.77},{"b":"001111100011111011111111110000111100001101111110001111101100001111000011110010110111111000111110","a":0.71},{"b":"001111000111111011101111110000111100001101111110011111101110001111000011111000110111111000111100","a":0.74},{"b":"001111000111111011111111110000111100001111111111011111101111111111000011110000110111111000111100","a":0.71},{"b":"011111101111111111000011110000111111111111111111011111101111111111000011110000111111111101111110","a":0.67},{"b":"011111101111111111000011110000111100001111111111011111101111111111000011110000111111111101111110","a":0.73},{"b":"001111000011111001100111110000111100001101111110011111100111111111000011110000110111111000111100","a":0.72}],"9":[{"b":"001111100011111011111111110000111100001101111111001111110000001100000011110000110111111000111100","a":0.71},{"b":"001111000111111011111111110000111100001101111111001111110000001100000011110000110011111100111110","a":0.64},{"b":"001111000111111011111111110000111100001101111111011111110000001100000011110000110111111000111100","a":0.7},{"b":"001111000111111011100111110000111110001101111111001111110000001100000011110000110111111000111100","a":0.72},{"b":"001111000111111001100111110000111110001101111111001111110000001100000011111000110111111000111100","a":0.74},{"b":"001111000011111001100011111000111110001101111111001111110000001100000011111000110111111000111100","a":0.74}]}};
+  const BUILTIN_TPL={ch:{"0":[{"b":"001110000011110001111110111001111100001111000011110000111100001111000111111111100011110000111100","a":0.8},{"b":"001110000011110001111110110001111100011111000011110000111100001111000111111111100011110000111100","a":0.8},{"b":"001111000011111001111111111000111110001111100011111000111110001111100011011111100011110000011100","a":0.83},{"b":"001110000011110001111110111001111100011111000011110000111100001111000111011111100011110000111000","a":0.77},{"b":"000110000011110001111110111001111100001111000011110000111100001111000011011111100011110000111100","a":0.8},{"b":"001111000011110001111110111000111100001111000011110000111100001111100011011111100011110000111100","a":0.8}],"1":[{"b":"011111101111111111111111000111110001111100011111000111110001111100011111000100110001001100001110","a":0.47},{"b":"111111101111111111111111000111110001111100011111000111110001111100011111000111110001111100001110","a":0.43},{"b":"011111101111111111111111000011110000111100001101000011010000110100001101000010010000100100001110","a":0.43},{"b":"011111101111111111111111000111110001110100011001000110010001100100011001000110010001100100001111","a":0.43}],"2":[{"b":"011111001111110011111110000000110000011100111111001111111111111011100000101111101011111111111111","a":0.77},{"b":"011111001111110001111110000000110000111100111111001111110110000011100000111111101111110001111111","a":0.8},{"b":"111111001111110011111110000001110001111100111111011111111110000011100000101111101111110111111110","a":0.8}],"3":[{"b":"111111001111110011111110000001110000011100111111001111110000011100000111011111101011110001111000","a":0.8},{"b":"111111001111110011111110000001110000111100111111001111110000011100000111111111101111110011111000","a":0.8},{"b":"111111001111110011111110000000110000011100111111001111110001111100000011011111101111110011111100","a":0.79},{"b":"011111001111110001111110000000110000011100111111001111110000011100000011011111100011110001111100","a":0.8}],"4":[{"b":"110000100000010100000111000001110011111111111111111111110000011100000111000001010000010100000010","a":0.8},{"b":"010000111100001111100011110000111110011111111111111111110111111100000011000000110000000100000011","a":0.8}],"5":[{"b":"111111111111111111111111111000001110000011111100111111100111111100000011011111111111110011111100","a":0.83}],"6":[{"b":"001111000011110001111100110000001110000011111100111111101110011111000111011111100011110000111100","a":0.8},{"b":"000111000011110001111100111000001110000011111100111111101110011111100011011111110011110000011100","a":0.8},{"b":"001110000011110001111100110000001110000011111100111111001111111011000111111111100011110000111000","a":0.8},{"b":"001111000011110001111100111000001110000011111100111111101110011111100011011111100011110000111100","a":0.8}],"7":[{"b":"111111101111111111111111000001110000011100000111000011110001110000111100001111000011110000011000","a":0.63}],"8":[{"b":"001111000011110001111110111000111110011100111110001111101111111111100011111111100011110000111100","a":0.77}],"9":[{"b":"000110000011110001111110111000111110011101111111001111110001111100000011000111100011110000111100","a":0.8}]},pct:{"0":[{"b":"001111000111111011100011110000111100001111000011110000111100001111000011110000110111111000111100","a":0.71},{"b":"001111000111111011000011110000111100001111000011110000111100001111000011110000110111111000111100","a":0.77},{"b":"001111100111111011111111110000111100001111000011110000111100001111000011111111110111111000111100","a":0.71},{"b":"001111000111111011111111110000111100001111000011110000111100001111000011110000110111111000111100","a":0.71},{"b":"001111000111111011111111110000111100001111000011110000111100001011000010110000100111111000111100","a":0.71},{"b":"011111101111111111000011110000111100001111000011110000111100001111000011110000111111111101111110","a":0.67},{"b":"001111000111111011110011110000111100001111000011110000111100001111000011111000110111111000111100","a":0.73},{"b":"011111001111111111000011110000111100001111000011110000111100001111000011110000111111111101111100","a":0.73}],"1":[{"b":"000011110001111101111111011111110000111100001111000011110000111100001111000011110000111100001111","a":0.31},{"b":"000111100001111111111111111111100001111000011110000111100001111000011110000111100001111100011110","a":0.36},{"b":"000011100001111111111111111111110001111100011111000111110001111100011111000111110001111100001110","a":0.33},{"b":"000011110000111100111111111111110000111100001111000011110000111100001111000011110000111100001111","a":0.29},{"b":"000011110001111111111111001111110000111100001111000011110000111100001111000011110000111100001111","a":0.33},{"b":"000011110001111111111111011111110001111100001111000111110001111100011111000111110001111100001110","a":0.35},{"b":"000011110001111111111111011111110000111100001111000011110000111100001111000011110001111100001110","a":0.35},{"b":"000011100001111111111111011111110001111100001111000011110000111100001111000011110000111100001110","a":0.31}],"2":[{"b":"001111000111111011100011110000110000001100000110000011000001100000111000011100001111111111111111","a":0.71},{"b":"001111000111111011111111110000110000001100000110000011100001100000111000011100001111111111111111","a":0.71},{"b":"001111000111111011000011110000110000001100000110000011000001100000110000001000001111111111111111","a":0.71},{"b":"001111100011111011111111110000110000001100000110000011100001100000111000011101101111111111111111","a":0.71},{"b":"001111100011111011111111110000110000001100000110000011100001100000111000011000001111111111111110","a":0.71},{"b":"001111000111111011111111110000110000001100000110000011100001110000111000001100000111111101111111","a":0.77},{"b":"001111000111111011111111110000110000001100000110000011000001100000110000001100000111111001111110","a":0.74},{"b":"001111001111111011000111000001110000011100000110000011000001100000010000001100000111111011111111","a":0.82}],"3":[{"b":"001111000111111011100011110000110000001100011110000111100000001100000011110000110111111000111100","a":0.71},{"b":"001111100011111011111111110000110000001100011110000111100000001100000011111100110111111000111110","a":0.71},{"b":"001111000111111011110111110000110000001100011110000111100000001111000011110000110111111000111100","a":0.71},{"b":"001111000011111011111111110000110000001100011110000111100000001100000011110000110111111000111100","a":0.71},{"b":"001111000011111001111111110000110000001100001111000111100000011101000011111000110111111000111100","a":0.77},{"b":"001111000111111011100011010000110000001100001110000111100000001100000011110000110111111000111100","a":0.76},{"b":"001111000111111011000011000000110000001100011111000111100000111100000011110000110111111000111100","a":0.75},{"b":"001111000111111011110111110000110000001100001110000011100000001101000011011000110111111000111100","a":0.77}],"4":[{"b":"000001000000111000011110001111100011011001100110110011101111111101111111000001100000011000000100","a":0.71},{"b":"000001000000111000011110001111100111111011000110110011101111111111111110000011100000111000000100","a":0.69},{"b":"000001000000111000011110001111100010011011000110110011101111111111111110000011100000111000000100","a":0.71},{"b":"000001000000111000011110001111100011011011000110110001101111111111111111000001100000011000000110","a":0.64},{"b":"000001000000111000011110001111100011111011101110111011101111111101111110000011100000111000000100","a":0.74},{"b":"000001100000111000011110001111100110011011000110110001101111111101111111000001100000011000000100","a":0.68},{"b":"000001000000111000011110001111100011011011100110111011101111111111111111000001100000011000000110","a":0.71},{"b":"000001100000111000011110001111100111111011001110110011101111111111111111000011100000111000000110","a":0.71}],"5":[{"b":"011111111111111111100000110000001100000001111100001111100000001101000011110000110111111000111100","a":0.71},{"b":"111111111111111111000000110000001100000001111100001111100000001100000011110000110111111000111100","a":0.77},{"b":"011111101111111101111110010000000100000001111110001111100000001100000011011110110111111000111100","a":0.79},{"b":"111111111111111111101110110000001100000001111100001111100000001101000011110000110111111000111100","a":0.76},{"b":"111111101111111111111110110000001100000001111100001111100000001000000010110000100111111000111100","a":0.71},{"b":"111111111111111111101110110000001100000001111100001111100000001111000011111000110111111000111100","a":0.73},{"b":"111111111111111111000000110000001100000001111100001111100000001100000011110000110111111000111110","a":0.72},{"b":"111111111111111011000000110000001111100011111100001111100011111000000011110000111111111000111100","a":0.75}],"6":[{"b":"001111000111111011000011110000111100000011111100111111101100001111000011110000110111111000111100","a":0.71},{"b":"001111100011111001111111111000010110000001111100011111100110001101100011011000110111111100111110","a":0.71},{"b":"001111000111111011100111110000111100000011111100111111101110001111000011111000110111111000111100","a":0.74},{"b":"001111000111111011111111110000111100000011111100111111101100001011000010111111100111111000111100","a":0.79},{"b":"001111000011111011101111110000111100000011111100111111101100001111000011110000110111111000111100","a":0.72},{"b":"001111000011111011111111110000111100000011111100111111101110001111000011111000110111111000111100","a":0.73},{"b":"001111000111111011111111110000111100000011111100111111101100001111000011110000110111111000111110","a":0.53},{"b":"001111000111111011100011110000001100000011111100111111101110001111000011110000110111111000111100","a":0.75}],"7":[{"b":"111111111111111100000011000000110000001100000011000000110000011000001100000110000001100000011000","a":0.71},{"b":"111111101111111101111111000000110000001100000011000000100000111000011100000110000001100000011000","a":0.79},{"b":"111111111111111101111111000000110000001100000011000001110000111000001100000110000001100000011000","a":0.76},{"b":"011111111111111101111111000000110000001100000011000000110000011000000100000111000001110000001000","a":0.71},{"b":"111111101111111100000110000001100000011000000110000011100000110000011000000110000001100000011000","a":0.75},{"b":"111111111111111100000011000000110000001100000011000001110000111000011100000110000001100000011000","a":0.67},{"b":"111111111111111100000111000000110000001100000011000001110000011000001100000110000001100000011000","a":0.75},{"b":"111111101111111101111111000001110000001100000011000001110000111000011100000110000001100000011000","a":0.76}],"8":[{"b":"001111000111111011100011110000111100001101111110011111101100001111000011110000110111111000111100","a":0.71},{"b":"001111000111111011000011110000111100001101111110011111101100001111000011110000110111111000111100","a":0.77},{"b":"001111100011111011111111110000111100001101111110001111101100001111000011110010110111111000111110","a":0.71},{"b":"001111000111111011101111110000111100001101111110011111101110001111000011111000110111111000111100","a":0.74},{"b":"001111000111111011111111110000111100001111111111011111101111111111000011110000110111111000111100","a":0.71},{"b":"011111101111111111000011110000111111111111111111011111101111111111000011110000111111111101111110","a":0.67},{"b":"011111101111111111000011110000111100001111111111011111101111111111000011110000111111111101111110","a":0.73},{"b":"001111000011111001100111110000111100001101111110011111100111111111000011110000110111111000111100","a":0.72}],"9":[{"b":"001111100011111011111111110000111100001101111111001111110000001100000011110000110111111000111100","a":0.71},{"b":"001111000111111011111111110000111100001101111111001111110000001100000011110000110011111100111110","a":0.64},{"b":"001111000111111011111111110000111100001101111111011111110000001100000011110000110111111000111100","a":0.7},{"b":"001111000111111011100111110000111110001101111111001111110000001100000011110000110111111000111100","a":0.72},{"b":"001111000111111001100111110000111110001101111111001111110000001100000011111000110111111000111100","a":0.74},{"b":"001111000011111001100011111000111110001101111111001111110000001100000011111000110111111000111100","a":0.74},{"b":"001111000111111011000011110000111100001101111111001111110000001100000011110000110111111000111100","a":0.69},{"b":"001111000111111011100011110000111100001101111111001111110000001101000011111000110111111000111100","a":0.71}]}};
   function tplDigit(kind,g){const L=TPL?.[kind]||{},B=BUILTIN_TPL[kind]||{},T={};for(const d of new Set([...Object.keys(L),...Object.keys(B)]))T[d]=[...(L[d]||[]),...(B[d]||[])];
     if(!Object.keys(T).length)return null;let best=null,s1=-1,s2=-1;
     for(const d of Object.keys(T)){let s=-1;for(const t of T[d])s=Math.max(s,tplSim(g,t));if(s>s1){s2=s1;s1=s;best=d;}else if(s>s2)s2=s;}
@@ -1228,7 +1237,8 @@ const OCR=(()=>{
   const tplCount=kind=>Object.keys(TPL?.[kind]||{}).length;
   // MapleStory always shows the % with 2 decimals; dots/commas are removed before reading, so restore the dot.
   // Read the LAST number before the bracket, so stray marks from an "EXP" label in the box are ignored.
-  const parseExp=t=>{const s=t.replace(/[,\.]/g,'').replace(/[ \t]+/g,' ');
+  const parseExp=t=>{const s=t.replace(/[,\.]/g,'').replace(/[ \t]+/g,' ')
+      .replace(/(^|[^\d])(\d{1,3}) (\d{3})(?=\s*[\[\(])/,'$1$2$3');   // the thousands comma read as a space ("177 807[6 59/" = 177,807) — the number before the bracket
     // a lost dot can leave a space ("[50 30%]") and "%" is often read as "/": both still mean NN.NN%
     let m=s.match(/(\d+)\s*[\[\(\]\)]+\s*(\d{1,3})\s?(\d{2})\s*[%\/\]\)]/);
     if(m){const exp=parseInt(m[1],10),pct=parseFloat(m[2]+'.'+m[3]);if(isFinite(exp)&&pct<=100)return {exp,pct};}
@@ -1252,7 +1262,7 @@ const OCR=(()=>{
   // the bracket before the % got lost and the digits ran together ("40652" + "286" → "40652286"): split where both fit the table
   function splitJoined(v){
     if(!v||typeof EXP_REQ==='undefined')return v;const L=levelHint??st.level;if(L==null)return v;const d=String(v.exp);
-    if(v.pct!=null&&expFitsAt(v,L))return v;
+    if(v.pct!=null&&(expFitsAt(v,L)||fitLevels(v).length))return v;   // fits a level (maybe the next one after a level-up): not joined
     // the % part is the last 3–4 digits; the bracket may also have been read as a digit ("[" → "1"), so try skipping one
     const tries=[];for(const k of [3,4])for(const j of [0,1]){if(d.length<=k+j+1)continue;const p=+d.slice(-k)/100;if(p>100)continue;tries.push({exp:+d.slice(0,-k-j),pct:p});}
     for(const t of tries)for(const LL of [L,L+1])if(expFitsAt(t,LL))return t;
@@ -1266,6 +1276,9 @@ const OCR=(()=>{
     const L=levelHint??st.level,R=L!=null?EXP_REQ[L]:0;
     const est=R?Math.round(R*v.pct/100):null,hidden=est!=null&&est>=EXP_HIDE;
     if(v.exp!=null&&v.exp<EXP_HIDE&&fitLevels(v).length)return v;
+    // a plain number below 1,000,000 on screen means the game still shows it, so the EXP is under a million: a % that would
+    // put it past a million is the misread ("6.60%" read as "[6807]"), not the number — keep the number, let the table give the %
+    if(hidden&&v.exp!=null&&v.exp>=1000&&v.exp<EXP_HIDE&&!expFitsAt(v,L))return {exp:v.exp,pct:null,pctBad:v.pct};
     if(v.exp==null||v.exp>=EXP_HIDE||(hidden&&!expFitsAt(v,L)))return est!=null?{exp:est,pct:v.pct,est:true}:{exp:null,pct:v.pct};
     return v;}
   const fitsHint=v=>{const L=levelHint??st.level;if(L==null)return fitLevels(v).length===1;return expFitsAt(v,L)||expFitsAt(v,L+1)||expFitsAt(v,L-1);};
@@ -1310,9 +1323,16 @@ const OCR=(()=>{
           if(D.length===v.pctInt+2){pc=+(D.slice(0,v.pctInt)+'.'+D.slice(v.pctInt));struct=true;}}   // one digit per glyph, or nothing
         else{const b=(await w.recognize(v.pct)).data.text.trim(),m=b.match(/(\d{1,3})\.(\d{2})/);text=`[${b}]`;if(m)pc=+(m[1]+'.'+m[2]);}
         val=pc!=null&&pc<=100?{exp:null,pct:pc}:null;}
-      else if(kind==='exp'&&v.num&&v.pct){const a=(await w.recognize(v.num)).data.text.trim(),b=(await w.recognize(v.pct)).data.text.trim();
+      else if(kind==='exp'&&v.num&&v.pct){const a=(await w.recognize(v.num)).data.text.trim();let b,pc=null;
+        // the % digits cut out by the layout (dot place known): templates first, then one digit per glyph — the whole "7.50%"
+        // read as text loses or invents digits ("2.507")
+        const tp=v.pctDigits&&v.gPct?tplRead('pct',v.gPct):null;
+        if(tp&&tp.length===v.pctInt+2){b=tp.slice(0,v.pctInt)+'.'+tp.slice(v.pctInt);struct=true;}
+        else if(v.pctDigits){await w.setParameters(P_RAW);pMode='raw';const D=(await w.recognize(v.pctDigits)).data.text.replace(/[^\d]/g,'');await useParams(w,false);
+          if(D.length===v.pctInt+2){b=D.slice(0,v.pctInt)+'.'+D.slice(v.pctInt);struct=true;}}
+        if(b==null)b=(await w.recognize(v.pct)).data.text.trim();
         text=`${a} [${b}]`;const n=a.replace(/[^\d]/g,''),m=b.match(/(\d{1,3})\.(\d{2})/);
-        const pc=m&&+(m[1]+'.'+m[2])<=100?+(m[1]+'.'+m[2]):null;
+        pc=m&&+(m[1]+'.'+m[2])<=100?+(m[1]+'.'+m[2]):null;if(pc==null)struct=false;
         val=n?{exp:parseInt(n,10),pct:pc}:(pc!=null?{exp:null,pct:pc}:null);
         if(val&&val.pct==null){const f=parseExp(text);if(f?.pct!=null)val.pct=f.pct;}}
       else{text=(await w.recognize(v.canvas)).data.text.trim();val=kind==='exp'?parseExp(text):parseMeso(text);}
@@ -1323,7 +1343,7 @@ const OCR=(()=>{
       if(solid&&agreeCount(res,kind,val)>=3)break;
       if(res.length>=10)break;}
     // %-only reads checked against the screen layout (digit count from the dot's place): two that agree settle it
-    const sr=res.filter(r=>r.struct);
+    const sr=res.filter(r=>r.struct&&r.v.pctOnly);
     if(kind==='exp'&&sr.length>=2){
       const top=[...new Map(sr.map(r=>[r.val.pct,sr.filter(o=>o.val.pct===r.val.pct).length]))].sort((a,b)=>b[1]-a[1])[0];
       if(top&&top[1]>=2){const b=sr.find(r=>r.val.pct===top[0]);return {best:b,raw:V.raw,tries:res.length,all:res.map(x=>x.v.tag+':'+x.text),agree:top[1]+2,list:V.list};}}
@@ -1681,39 +1701,128 @@ const OCR=(()=>{
       st.mesoHidden=null;if(v!=null&&acceptMeso(v,t,r.agree>=2)){st.errMeso=0;render();}
     }catch(e){}finally{busy=false;}}
   /* ---- game chat: the box right above the HUD, read line by line ----
-     Each line is cut with its OWN text colour (taken from the "[hh:mm]" it starts with) and, as a second try, a plain
-     light/dark split; the read with more letters and fewer stray marks wins. Lines without a time stamp are not chat. */
+     A chat line is "[hh:mm] Name [CH pill] : message" (Harry's description of the game's own layout):
+     • the white "CH20" pill (red text + ear) is found by its colour, read on its own for the channel, and splits the line:
+       name on the left, message on the right — so the pill is never read as letters
+     • megaphone lines sit on yellow / pink / cyan bands with dark text and a light "[Item Name]": they are cut by distance
+       from the band's own colour, so both the dark words and the light item name stay
+     • a line without a time stamp is the rest of the message above it (long messages wrap); time stamps far from the
+       others are misreads ("900k." read as 09:00) and are treated the same way
+     • the Korean model is on for real Korean chat, but a stray Hangul glyph inside an English line is noise: dropped */
   let chatW=null;
   async function chatWorker(){if(chatW)return chatW;await ensure();const opts={};['workerPath','corePath'].forEach(k=>{if(CFG[k])opts[k]=CFG[k];});if(CFG.chatLangPath)opts.langPath=CFG.chatLangPath;
-    chatW=await Tesseract.createWorker(['eng','kor'],1,opts);await chatW.setParameters({tessedit_pageseg_mode:'7'});return chatW;}
-  const CHAT_RE=/\[?\s*(\d{1,2})\s*[:;.]?\s*(\d{2})\s*[\]|1lI]\s*(.+)$/;
+    chatW=await Tesseract.createWorker(['eng','kor'],1,opts);await chatW.setParameters({tessedit_pageseg_mode:'7'});
+    return chatW;}
+  // "[00:57]" at the start of the line; the "[" is often read as "1" or "|" ("1101.00]"), the ":" sometimes lost ("[0057]")
+  const CHAT_TS1=/^.{0,3}?(\d{2})\s*[:;.,]\s*(\d{2})\s*[\]|1lIJ)}]\s*(.*)$/,CHAT_TS2=/^[^A-Za-z0-9가-힣]{0,3}(\d{1,2})\s*(\d{2})\s*[\]|lIJ)}]\s*(.*)$/;
+  const chatTs=t=>t.match(CHAT_TS1)||t.match(CHAT_TS2);
+  // stray marks the band edges and the scrollbar leave: "~“. [Work Gloves]…", "2 ： Selling…", "…60% l"
+  const chatClean=t=>t.replace(/^[^A-Za-z0-9가-힣\[\(<>]+/,'').replace(/^[A-Za-z0-9]{1,2}\s*[:：;.]\s+(?=\S)/,'').replace(/^[^A-Za-z0-9가-힣\[\(<>]+/,'').replace(/(?:\s+[Il1|\]\[!])+\s*$/,'').replace(/[\s|]+$/,'').trim();
   function maskLine(src,mode,zw){const W=src.width,H=src.height,n=W*H,id=new ImageData(new Uint8ClampedArray(src.data),W,H),d=id.data;
+    const dist=(a,b)=>Math.hypot(a[0]-b[0],a[1]-b[1],a[2]-b[2]);
     if(mode==='otsu'){const L=new Uint8Array(n);for(let i=0;i<n;i++)L[i]=d[i*4]*.299+d[i*4+1]*.587+d[i*4+2]*.114;const hist=new Array(256).fill(0);for(const v of L)hist[v]++;
       let sum=0;for(let i=0;i<256;i++)sum+=i*hist[i];let sB=0,wB=0,best=0,th=128;
       for(let t=0;t<256;t++){wB+=hist[t];if(!wB)continue;const wF=n-wB;if(!wF)break;sB+=t*hist[t];const mB=sB/wB,mF=(sum-sB)/wF,v=wB*wF*(mB-mF)*(mB-mF);if(v>best){best=v;th=t;}}
       let hi=0;for(const v of L)if(v>th)hi++;const tb=hi<n/2;for(let i=0;i<n;i++){const on=tb?L[i]>th:L[i]<=th;d[i*4]=d[i*4+1]=d[i*4+2]=on?0:255;}}
+    else if(mode==='bg'){   // ink = anything clearly unlike the band's own colour (dark words AND the light item name on a megaphone band)
+      const q=[[],[],[]];for(let i=0;i<n;i+=3)for(let k=0;k<3;k++)q[k].push(d[i*4+k]);const med=q.map(a=>a.sort((x,y)=>x-y)[a.length>>1]);
+      for(let i=0;i<n;i++){const on=dist([d[i*4],d[i*4+1],d[i*4+2]],med)>60;d[i*4]=d[i*4+1]=d[i*4+2]=on?0:255;}}
     else{const pts=[];for(let y=0;y<H;y++)for(let x=0;x<zw;x++){const i=(y*W+x)*4;pts.push([d[i],d[i+1],d[i+2]]);}
-      const med=[0,1,2].map(k=>pts.map(q=>q[k]).sort((a,b)=>a-b)[pts.length>>1]),dist=(a,b)=>Math.hypot(a[0]-b[0],a[1]-b[1],a[2]-b[2]);
+      const med=[0,1,2].map(k=>pts.map(q=>q[k]).sort((a,b)=>a-b)[pts.length>>1]);
       const far=pts.map(q=>[dist(q,med),q]).sort((a,b)=>b[0]-a[0]).slice(0,Math.max(5,pts.length*0.08|0)).map(x=>x[1]),tc=[0,1,2].map(k=>far.reduce((a,q)=>a+q[k],0)/far.length);
       for(let i=0;i<n;i++){const q=[d[i*4],d[i*4+1],d[i*4+2]],dt=dist(q,tc);const on=dt<70&&dt<dist(q,med)*0.7;d[i*4]=d[i*4+1]=d[i*4+2]=on?0:255;}}
     return id;}
   // Tesseract spaces out Hangul syllables ("사 람 채 널"): join runs of single syllables back into words
   const fixKo=t=>t.replace(/(?:^|\s)((?:[가-힣]\s){2,}[가-힣])(?=\s|$)/g,m=>' '+m.replace(/\s+/g,'')).trim();
+  // Hangul is kept only when the line really is Korean (enough of it, in words) — otherwise it is noise from the band or an icon
+  const chatKo=t=>{const h=(t.match(/[가-힣]/g)||[]).length,l=(t.match(/[A-Za-z]/g)||[]).length,word=/[가-힣]{2,}/.test(t);
+    return h&&!(word&&h>=0.3*(h+l))?t.replace(/[가-힣ㄱ-ㅎㅏ-ㅣ]+/g,' ').replace(/\s+/g,' ').trim():t;};
+  const subImg=(src,x0,x1)=>{x0=Math.max(0,x0|0);x1=Math.min(src.width,x1|0);const W=Math.max(1,x1-x0),H=src.height,out=new ImageData(W,H);
+    for(let y=0;y<H;y++)out.data.set(src.data.subarray((y*src.width+x0)*4,(y*src.width+x1)*4),y*W*4);return out;};
+  // the channel pill (cream/white with red "CH20" + an ear): found by its red text — nothing else on a chat line is that red.
+  // Its edges: a little before the red, and the ear after it.
+  const chatRed=(d,i)=>d[i]>170&&d[i+1]<130&&d[i+2]<110&&d[i]-d[i+1]>80;
+  function findPill(src){const W=src.width,H=src.height,d=src.data,col=new Uint16Array(W);
+    for(let x=0;x<W;x++){let k=0;for(let y=0;y<H;y++)if(chatRed(d,(y*W+x)*4))k++;col[x]=k;}
+    // the letters sit close together; the ear comes after a wider gap — the text run stops there
+    for(let x=Math.round(H*1.5);x<W;x++){if(col[x]<2)continue;let e=x,gap=0,tot=0;for(let k=x;k<W&&gap<=H*0.2;k++){if(col[k]>=2){e=k;gap=0;tot+=col[k];}else gap++;}
+      const w=e-x+1;if(w>=H*0.8&&w<=H*2.2&&tot>=H*2)return {x0:Math.max(0,Math.round(x-H*0.3)),x1:Math.min(W-1,Math.round(e+H*1.25)),r0:x,r1:e};
+      x=e;}
+    return null;}
+  // each mode masks the WHOLE line (so the text colour comes from its time stamp, the band colour from the whole band), then
+  // only the part x0…x1 is read
+  // stops at the first read Tesseract is sure of (and that has its time stamp, when one is needed) — most lines need one pass
+  async function chatOcr(w,src,modes,zw,x0=0,x1=src.width,needTs=false){const c=document.createElement('canvas');c.width=Math.max(1,(x1|0)-(x0|0));c.height=src.height;const g=c.getContext('2d');const reads=[];
+    for(const mode of modes){if(reads.some(r=>r.cf>=0.8&&(!needTs||r.m)))break;g.putImageData(subImg(maskLine(src,mode,zw),x0,x1),0,0);const R=(await w.recognize(c)).data,t=R.text.replace(/\s+/g,' ').trim();
+      // letters count only as much as Tesseract trusts them: a garbled read of the wrong mask has plenty of letters but low confidence
+      const good=(t.match(/[가-힣A-Za-z0-9]/g)||[]).length,junk=(t.match(/[|=_~—\\{}<>«»©®]/g)||[]).length,m=chatTs(t),cf=Math.max(0,Math.min(100,R.confidence??60))/100;
+      reads.push({t,m:needTs?m:null,mode,cf,sc:good*cf*cf-3*junk+(needTs&&m?15:0)});}
+    return reads.sort((a,b)=>b.sc-a.sc);}
+  // the channel number: the pill always shows "CH" + 2 digits in a tiny fixed pixel font — too small for Tesseract (it drops a
+  // digit or reads the ear as one), so each red glyph is cut out and compared with the digit shapes cut from Harry's own screens
+  // (tools/build_ch_tpl.js). Not exactly 4 glyphs, or a digit that matches nothing clearly → no channel shown (never a wrong one).
+  function pillGlyphs(src,p){const W=src.width,H=src.height,d=src.data,x0=Math.max(0,p.r0-3),x1=Math.min(W-1,p.r1+3),w=x1-x0+1,on=new Uint8Array(w*H);
+    for(let y=0;y<H;y++)for(let x=0;x<w;x++){const i=(y*W+x0+x)*4;on[y*w+x]=d[i]>150&&d[i+1]<140&&d[i]-d[i+1]>60?1:0;}
+    const cols=[];for(let x=0;x<w;x++){let k=0;for(let y=0;y<H;y++)k+=on[y*w+x];cols.push(k);}
+    const runs=[];let a=-1;for(let x=0;x<=w;x++){const k=x<w?cols[x]:0;if(k&&a<0)a=x;if(!k&&a>=0){runs.push([a,x-1]);a=-1;}}
+    // glyphs: runs closer than a quarter of the typical glyph width belong to one glyph (anti-aliasing can open a gap inside "H")
+    const gl=[];for(const r of runs){const last=gl[gl.length-1];if(last&&r[0]-last[1]<=Math.max(1,H*0.03))last[1]=r[1];else gl.push([...r]);}
+    return gl.filter(g=>g[1]-g[0]>=1).map(([a,b])=>{let y0=H,y1=-1;for(let y=0;y<H;y++)for(let x=a;x<=b;x++)if(on[y*w+x]){if(y<y0)y0=y;if(y>y1)y1=y;}
+      const gw=b-a+1,gh=y1-y0+1,GW=8,GH=12;let s='';
+      for(let gy=0;gy<GH;gy++)for(let gx=0;gx<GW;gx++){let n=0,t=0;const ya=y0+Math.floor(gy*gh/GH),yb=Math.max(ya+1,y0+Math.floor((gy+1)*gh/GH)),xa=a+Math.floor(gx*gw/GW),xb=Math.max(xa+1,a+Math.floor((gx+1)*gw/GW));
+        for(let y=ya;y<yb;y++)for(let x=xa;x<xb;x++){t++;n+=on[y*w+x];}s+=n*2>=t?'1':'0';}
+      return {b:s,a:+(gw/Math.max(1,gh)).toFixed(2)};});}
+  function pillChannel(src,p){const g=pillGlyphs(src,p);if(g.length!==4)return {ch:null,g};const T=BUILTIN_TPL.ch||{};
+    const dig=g.slice(2).map(x=>{let best=null,s1=-1,s2=-1;for(const dd of Object.keys(T)){let sc=-1;for(const t of T[dd])sc=Math.max(sc,tplSim(x,t));if(sc>s1){s2=s1;s1=sc;best=dd;}else if(sc>s2)s2=sc;}
+      return s1>=0.7&&s1-s2>=0.05?best:null;});
+    return {ch:dig.every(x=>x!=null)&&+(dig.join(''))>0?+dig.join(''):null,g};}
+  // a line already read (same pixels) is not read again: the box only scrolls when a message arrives, so a repeat read of the
+  // chat costs almost nothing and only new lines go through OCR
+  const chatCache=new Map();
+  function chatPrint(src){const W=src.width,H=src.height,d=src.data,GX=64,GY=4;let s='';
+    for(let gy=0;gy<GY;gy++)for(let gx=0;gx<GX;gx++){let t=0,n=0;for(let y=Math.floor(gy*H/GY);y<Math.floor((gy+1)*H/GY);y+=2)for(let x=Math.floor(gx*W/GX);x<Math.floor((gx+1)*W/GX);x+=2){const i=(y*W+x)*4;t+=d[i]+d[i+1]+d[i+2];n++;}
+      s+=String.fromCharCode(65+Math.min(25,Math.round(t/Math.max(1,n)/3/10.2)));}return s;}
+  // megaphone bands are bright and coloured: the band mask first; a dark chat line: its time stamp's text colour first
+  function chatModes(src){const d=src.data,q=[[],[],[]];for(let i=0;i<d.length;i+=40)for(let k=0;k<3;k++)q[k].push(d[i+k]);const m=q.map(a=>a.sort((x,y)=>x-y)[a.length>>1]);
+    return Math.max(...m)>120&&Math.max(...m)-Math.min(...m)>50?['bg','color','otsu']:['color','bg','otsu'];}
   async function readChat(){
     if(!stream||!video.videoWidth||isBlack())return {err:'ยังไม่ได้แชร์จอเกม'};
     let hu=auto.hud&&auto.hud.W===video.videoWidth&&auto.hud.Rs!=null?auto.hud:null;if(!hu){const h=findHud();if(h)hu=auto.hud={P:h.P,W:h.W,H:h.H,Rs:h.Rs,Bs:h.Bs,y:h.y};}
     if(!hu)return {err:'หาแถบ HP/MP ด้านล่างไม่เจอ — ให้เห็นหน้าต่างเกมทั้งหมด'};
-    const w=await chatWorker(),P=hu.P,x=Math.max(0,hu.Rs-2.0*P),wd=Math.min(video.videoWidth-x,5.05*P),lh=0.148*P,S=3,lines=[];let miss=0;
-    for(let k=0;k<8&&miss<2;k++){const y=hu.y-0.6*P-k*lh-lh/2;if(y<0)break;
+    const w=await chatWorker(),P=hu.P,x=Math.max(0,hu.Rs-2.0*P),wd=Math.min(video.videoWidth-x,5.05*P),lh=0.148*P,S=3,zw=Math.round(0.42*P*S),rows=[];let miss=0;
+    // bottom line first, upwards until the box ends (normally 4–5 lines; a taller box is read the same way)
+    for(let k=0;k<10&&miss<3;k++){const y=hu.y-0.6*P-k*lh-lh/2;if(y<0)break;
       const c=document.createElement('canvas');c.width=Math.round(wd*S);c.height=Math.round(lh*S);const g=c.getContext('2d',{willReadFrequently:true});g.imageSmoothingQuality='high';g.drawImage(video,x,y,wd,lh,0,0,c.width,c.height);
-      const src=g.getImageData(0,0,c.width,c.height),reads=[];
-      for(const mode of ['color','otsu']){g.putImageData(maskLine(src,mode,Math.round(0.42*P*S)),0,0);const t=(await w.recognize(c)).data.text.replace(/\s+/g,' ').trim();
-        const good=(t.match(/[가-힣A-Za-z0-9]/g)||[]).length,junk=(t.match(/[|=_~—\\{}<>]/g)||[]).length,m=t.match(CHAT_RE);reads.push({t,m,sc:good-3*junk+(m?15:0)});}
-      reads.sort((a,b)=>b.sc-a.sc);const r=reads[0];if(!r.m){miss++;continue;}miss=0;
-      const rest=r.m[3],ci=rest.indexOf(':');let name=ci>0?rest.slice(0,ci):'',msg=ci>0?rest.slice(ci+1):rest;
-      if(ci<=0){const nm=rest.match(/^([A-Za-z0-9_]{2,13})\s*[\[{(]?\s*[)\]}]?\s*[:;3|]?\s+(.*)$/);if(nm){name=nm[1];msg=nm[2];}}   // the ":" was misread
-      name=name.replace(/\b(?:CH|cH|Ch)\s*\d*\b.*$/,'').replace(/[^A-Za-z0-9가-힣_()\s]/g,'').replace(/\(\)\s*$/,'').trim();msg=fixKo(msg.replace(/^[\s:;|]+|[\s|]+$/g,''));
-      if(msg)lines.unshift({time:`${r.m[1].padStart(2,'0')}:${r.m[2]}`,name,msg});}
+      const src=g.getImageData(0,0,c.width,c.height),fp=chatPrint(src);let row=chatCache.get(fp)||null;
+      if(row){row={...row};if(row.cont){miss++;if(row.good<2){rows.unshift(null);continue;}}else miss=0;rows.unshift(row);continue;}
+      const pill=findPill(src),modes=chatModes(src);
+      if(pill){const L=(await chatOcr(w,src,modes,zw,0,pill.x0,true))[0];
+        if(L?.m){let R=(await chatOcr(w,src,modes,zw,pill.x1+1,src.width))[0];
+          const weak=x=>!x||x.sc<Math.max(4,(x.t.length||0)*0.3);
+          if(weak(R)){const A=(await chatOcr(w,src,modes.slice(0,2),zw,0,src.width,true))[0];   // a doubtful cut: the whole line, message after its ":"
+            const rest=A?.m?A.m[3]:'',cj=rest.search(/[:：]/);
+            if(cj>0){const t=rest.slice(cj+1),gd=(t.match(/[가-힣A-Za-z0-9]/g)||[]).length*A.cf*A.cf;if(gd>(R?.sc??0))R={...A,t};}}
+          row={pill:true,ts:[L.m[1],L.m[2]],name:L.m[3],msg:(R?.t||'').replace(/^[\s:;|.,'"`]+/,''),...(()=>{const c=pillChannel(src,pill);return {ch:c.ch,chG:c.g};})(),raw:L.t+' · '+(R?.t||'')};}}
+      if(!row){const r=(await chatOcr(w,src,modes,zw,0,src.width,true))[0];
+        if(r?.m){const rest=r.m[3],ci=rest.indexOf(':');let name=ci>0?rest.slice(0,ci):'',msg=ci>0?rest.slice(ci+1):rest;
+          if(ci<=0){const nm=rest.match(/^([A-Za-z0-9_]{2,13})\s*[\[{(]?\s*[)\]}]?\s*[:;3|]?\s+(.*)$/);if(nm){name=nm[1];msg=nm[2];}}   // the ":" was misread
+          const chm=name.match(/\b(?:CH|cH|Ch)\s*(\d{1,2})/);row={ts:[r.m[1],r.m[2]],name,msg,ch:chm?+chm[1]:null,raw:r.t};}
+        else row={cont:true,msg:r?.t||'',good:(r?.t.match(/[가-힣A-Za-z0-9]/g)||[]).length};}
+      chatCache.set(fp,row);if(chatCache.size>80)chatCache.delete(chatCache.keys().next().value);row={...row};
+      if(row.cont){miss++;if(row.good<2){rows.unshift(null);continue;}}else miss=0;
+      rows.unshift(row);}
+    // time stamps: a chat box covers a few minutes at most — one far from the rest (circular, past midnight) is a misread
+    const mins=rows.filter(r=>r&&!r.cont).map(r=>(+r.ts[0])*60+(+r.ts[1])),mid=mins.length?[...mins].sort((a,b)=>a-b)[mins.length>>1]:null;
+    const lines=[];let lastOk=false;
+    for(const r of rows){if(!r){lastOk=false;continue;}
+      // a stamp far from the others is a misread time on a real chat line (it still starts with "[..]" + a name): keep the line,
+      // borrow the time of the line above (chat is in time order)
+      let time=null;if(!r.cont){const m=(+r.ts[0])*60+(+r.ts[1]),dd=Math.abs(m-mid),far=Math.min(dd,1440-dd)>3||+r.ts[0]>23||+r.ts[1]>59;
+        time=far?(lines.length?lines[lines.length-1].time:null):`${r.ts[0].padStart(2,'0')}:${r.ts[1]}`;if(far&&!time)time=`${String(Math.floor(mid/60)).padStart(2,'0')}:${String(mid%60).padStart(2,'0')}`;}
+      if(r.cont){if(lastOk&&lines.length){const m=chatKo(fixKo(chatClean(r.msg)));if(m)lines[lines.length-1].msg+=' '+m;}continue;}   // the top line's first half is off screen: skip
+      const nm=r.pill?r.name.replace(/[^A-Za-z0-9가-힣_]/g,''):r.name.replace(/\b(?:CH|cH|Ch)\s*\d*\b.*$/,'').replace(/[^A-Za-z0-9가-힣_()\s]/g,' ').replace(/\(\)\s*$/,'').trim().split(/\s+/)[0]||'';
+      const msg=chatKo(fixKo(chatClean(r.msg)));
+      if(msg){lines.push({time,name:nm,ch:r.ch??null,msg,...(CFG.chatGlyphs&&r.chG?{chG:r.chG}:{})});lastOk=true;}else lastOk=false;}
     return {lines};}
   /* ---- the notices at the bottom-right ("You received EXP (+40)", "You have gained mesos (+51)", "Rib x1 earned. (Etc)") ----
      They stack up from the bottom and fade within seconds, so this looks often but cheaply: the corner is cut into text lines
@@ -2016,7 +2125,8 @@ const OCR=(()=>{
     for(const k of ['exp','meso']){if(!regions[k]||(k==='meso'&&mesoOff))continue;const r=await readRegion(w,k);if(!r)continue;const K=k==='exp'?'Exp':'Meso';
       out[k]=r.best?.val??null;out['all'+K]=r.all;out['raw'+K]=r.best?.text||'';out['img'+K]=shot(r.raw,36);out['bin'+K]=r.best?shot(r.best.v.canvas,30):null;
       if(k==='exp'&&out.exp){
-        if(out.exp.est){out.expSure=true;out.rawExp+=` → ≈${out.exp.exp} (คิดจาก % × ตาราง EXP — เกมไม่โชว์ตัวเลขเมื่อเกินล้าน)`;}
+        if(out.exp.pctBad!=null){out.expSure=true;out.rawExp+=` → ${out.exp.exp} (อ่าน % เพี้ยนเป็น ${out.exp.pctBad}% — ใช้เลข EXP ที่จอโชว์)`;}
+        else if(out.exp.est){out.expSure=true;out.rawExp+=` → ≈${out.exp.exp} (คิดจาก % × ตาราง EXP — เกมไม่โชว์ตัวเลขเมื่อเกินล้าน)`;}
         else if(fitsHint(out.exp)||fitLevels(out.exp).length===1){out.expSure=true;}       // fits another level: the level is wrong, not the read
         else{const fix=repairExp(out.exp);if(fix){out.rawExp+=` → แก้เป็น ${fix.exp} (ตรงกับตาราง EXP${fix.approx?' · ค่าประมาณ':''})`;out.exp={exp:fix.exp,pct:fix.pct};out.expSure=!fix.approx;}else out.expSure=false;}
         // the level the EXP bar itself proves (both numbers match the table at exactly that level)
@@ -2055,6 +2165,7 @@ const OCR=(()=>{
         for(const v of r.listMeso){const g=alignGlyphs(v.gAll,dm.length);if(g)tplLearn('meso',g,dm);}}
       if(regions.exp){if(okE)st.errExp=0;else st.errExp++;st.rawExp=r.rawExp;}
       if(regions.meso&&!mesoOff){if(okM)st.errMeso=0;else st.errMeso++;st.rawMeso=r.rawMeso;}
+      if(!r.black){if(regions.meso&&!mesoOff&&!okM&&r.meso!=null)keepMiss('meso',r,t);if(regions.exp&&!okE&&r.exp)keepMiss('exp',r,t);}
       const stat=(ok,val,base)=>ok?'ok':(val!=null&&!r.black&&(base==null||(val===r.exp?st.expRej.length:st.mesoRej.length))?'wait':'no');
       st.log.push({t,r,okE:stat(okE,r.exp,st.exp),okM:stat(okM,r.meso,st.meso),hid:mesoOff});if(st.log.length>6)st.log.shift();
       renderLog();render();autofill();
@@ -2131,17 +2242,26 @@ const OCR=(()=>{
     video.addEventListener('loadedmetadata',()=>drawBoxes());
     render();
   }
-  // save exactly what the reader sees (full frame, PNG) — the boxes are stored inside the file for the developer
+  /* Reads that were turned down, kept as the box's own pixels (full size, a little margin): a misread that happens only on some
+     video frames can't be found again from one later screenshot. The last 5 of each kind stay in memory only (this browser,
+     this session) and go out only inside the "💾 เก็บภาพทดสอบ" file, when the player saves one. */
+  const misses={exp:[],meso:[]};
+  function keepMiss(k,r,t){const R=regions[k];if(!R||!video.videoWidth)return;const W=video.videoWidth,H=video.videoHeight;
+    const mx=R.w*W*0.15,my=R.h*H*0.4,x=Math.max(0,R.x*W-mx),y=Math.max(0,R.y*H-my),w=Math.min(W-x,R.w*W+mx*2),h=Math.min(H-y,R.h*H+my*2);
+    const c=document.createElement('canvas');c.width=Math.round(w);c.height=Math.round(h);c.getContext('2d').drawImage(video,x,y,w,h,0,0,c.width,c.height);
+    misses[k].push({t,read:k==='exp'?r.exp:r.meso,raw:k==='exp'?r.rawExp:r.rawMeso,now:k==='exp'?st.exp:st.meso,img:c.toDataURL('image/png')});if(misses[k].length>5)misses[k].shift();}
+  // save exactly what the reader sees (full frame, PNG) — the boxes and the last turned-down reads are stored inside the file
   async function saveFrame(){
     if(!stream||!video.videoWidth){alert('เริ่มแชร์หน้าจอก่อนนะคะ');return;}
     const c=document.createElement('canvas');c.width=video.videoWidth;c.height=video.videoHeight;c.getContext('2d').drawImage(video,0,0);
     const blob=await new Promise(r=>c.toBlob(r,'image/png'));let buf=new Uint8Array(await blob.arrayBuffer());
-    const info=JSON.stringify({app:'LogBook',v:1,w:c.width,h:c.height,regions,read:st.log[st.log.length-1]?{exp:st.log[st.log.length-1].r.exp,meso:st.log[st.log.length-1].r.meso}:null,ua:navigator.userAgent});
+    const info=JSON.stringify({app:'LogBook',v:1,w:c.width,h:c.height,regions,read:st.log[st.log.length-1]?{exp:st.log[st.log.length-1].r.exp,meso:st.log[st.log.length-1].r.meso}:null,misses,ua:navigator.userAgent});
     buf=pngWithText(buf,'logbook',info);
     const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([buf],{type:'image/png'}));
     const d=new Date(),p=n=>String(n).padStart(2,'0');a.download=`logbook-test-${d.getFullYear()}${p(d.getMonth()+1)}${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}.png`;
     document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),5000);
-    $('ocrHint').textContent='💾 เก็บภาพแล้ว — ส่งไฟล์ logbook-test-….png ให้ผู้พัฒนาได้เลย';
+    const nm=misses.exp.length+misses.meso.length;
+    $('ocrHint').textContent='💾 เก็บภาพแล้ว'+(nm?` (แนบภาพที่อ่านพลาดล่าสุด ${nm} ภาพไว้ในไฟล์ด้วย)`:'')+' — ส่งไฟล์ logbook-test-….png ให้ผู้พัฒนาได้เลย';
   }
   function pngWithText(png,key,text){ // insert a tEXt chunk right after IHDR
     const enc=new TextEncoder(),data=enc.encode(key+'\0'+text),len=data.length;
@@ -2154,7 +2274,7 @@ const OCR=(()=>{
 renderLog();render();$('ocrHint').textContent='↺ เริ่มนับใหม่แล้ว — ตัวเลขจะขึ้นอีกครั้งในไม่กี่วินาที';if(was)start();else if(stream)readOnce();}
   return {init,live,setTicker,readNow,seed,restart,rememberMap,checkBoxes,learnPct:async v=>{if(!stream||!regions.exp||v==null)return;await tplLoad();const V=variants(regions.exp);if(!V)return;const ds=String(Math.round(v*100)).padStart(3,'0');
     for(const x of V.list){if(x.pctOnly&&x.gPct&&x.pctInt!=null&&x.gPct.length===ds.length&&x.pctInt===ds.length-2)await tplLearn('pct',x.gPct,ds);}},
-  learnMeso:async v=>{if(!stream||!regions.meso||v==null)return;const r=await readNow();if(!r.listMeso)return;const dm=String(v);for(const x of r.listMeso){const g=alignGlyphs(x.gAll,dm.length);if(g)await tplLearn('meso',g,dm);}},_tpl:()=>TPL,_tplLearn:tplLearn,_levelCanvases:()=>levelCanvases(regions.who).map(c=>c.toDataURL()),_fromPct:v=>fromPct(v),_titlePrint:titlePrint,_printSim:printSim,_variants:k=>{const V=variants(regions[k]);return V?V.list.map(v=>({tag:v.tag,count:v.count,modeH:v.modeH,img:v.canvas.toDataURL()})):null;},hasRegions:()=>!!(regions.exp||regions.meso),hasAny:()=>Object.values(regions).some(Boolean),has:k=>!!regions[k],readWho,readMap,_readNow:readNow,reset:()=>{reset();render();},snapshot:()=>({expGained:st.expGained,mesoCollected:st.mesoCollected,t0:st.t0,quality:{...st.q,mesoEst:st.q.mesoEst.slice(-20),rateHr:Math.round(expRate()||0),mesoExtra:Math.round(mesoExtra()),auto:{...auto.src}}}),autoFind,autoText,setMap,_findHud:findHud,_locateMeso:()=>locateMeso(auto.hud),_mesoVisible:mesoVisible,_auto:()=>auto,_mesoExtra:mesoExtra,_seek:seekMeso,_learnAnchor:learnMesoAnchor,_mesoOff:()=>mesoOff,_setMesoOff:v=>{mesoOff=!!v;st.mesoHidden=v?Date.now():null;},_setRegion:(k,v)=>{regions[k]=v;},_live:()=>live(),msgState:()=>st.msg,setMsgOn:v=>{msgOn=!!v;if(timer){if(msgOn)msgStart();else msgStop();}},_msgScan:()=>msgScan(),_msgTick:async()=>{const t0=timer;timer=timer||1;try{await msgTick();}finally{timer=t0;}},_msgParse:msgParse,_msgFill:()=>msgFill,_msgReset:(prime)=>{msgPrev=prime?null:[];msgCache=[];st.msg={exp:0,party:0,kills:0,meso:0,items:{},log:[],mesoAtSeen:0};},_ensureW:()=>ensure(),sizeCheck,readChat,_variantsOf:r=>variants(r),_tplSim:(a,b)=>tplSim(a,b),_relevel:relevel,autofill,_learnLevel:learnLevel,_readLevelDigits:async()=>readLevelDigits(await ensure()),learnLevel,_variants:k=>variants(regions[k]),_readRegion:async k=>readRegion(await ensure(),k),_render:()=>render(),stop,drawBoxes,_parseExp:parseExp,_parseMeso:parseMeso,_st:st,_accExp:acceptExp,_reqNow:reqNow,_accMeso:acceptMeso,_repairExp:v=>repairExp(v),_fitLevels:fitLevels,_setHint:h=>{levelHint=h;}};
+  learnMeso:async v=>{if(!stream||!regions.meso||v==null)return;const r=await readNow();if(!r.listMeso)return;const dm=String(v);for(const x of r.listMeso){const g=alignGlyphs(x.gAll,dm.length);if(g)await tplLearn('meso',g,dm);}},_tpl:()=>TPL,_tplLearn:tplLearn,_levelCanvases:()=>levelCanvases(regions.who).map(c=>c.toDataURL()),_fromPct:v=>fromPct(v),_titlePrint:titlePrint,_printSim:printSim,_variants:k=>{const V=variants(regions[k]);return V?V.list.map(v=>({tag:v.tag,count:v.count,modeH:v.modeH,img:v.canvas.toDataURL()})):null;},hasRegions:()=>!!(regions.exp||regions.meso),hasAny:()=>Object.values(regions).some(Boolean),has:k=>!!regions[k],readWho,readMap,_readNow:readNow,reset:()=>{reset();render();},snapshot:()=>({expGained:st.expGained,mesoCollected:st.mesoCollected,t0:st.t0,quality:{...st.q,mesoEst:st.q.mesoEst.slice(-20),rateHr:Math.round(expRate()||0),mesoExtra:Math.round(mesoExtra()),auto:{...auto.src}}}),autoFind,autoText,setMap,_findHud:findHud,_locateMeso:()=>locateMeso(auto.hud),_mesoVisible:mesoVisible,_auto:()=>auto,_mesoExtra:mesoExtra,_seek:seekMeso,_learnAnchor:learnMesoAnchor,_mesoOff:()=>mesoOff,_setMesoOff:v=>{mesoOff=!!v;st.mesoHidden=v?Date.now():null;},_setRegion:(k,v)=>{regions[k]=v;},_live:()=>live(),msgState:()=>st.msg,setMsgOn:v=>{msgOn=!!v;if(timer){if(msgOn)msgStart();else msgStop();}},_msgScan:()=>msgScan(),_msgTick:async()=>{const t0=timer;timer=timer||1;try{await msgTick();}finally{timer=t0;}},_msgParse:msgParse,_msgFill:()=>msgFill,_msgReset:(prime)=>{msgPrev=prime?null:[];msgCache=[];st.msg={exp:0,party:0,kills:0,meso:0,items:{},log:[],mesoAtSeen:0};},_ensureW:()=>ensure(),sizeCheck,readChat,_variantsOf:r=>variants(r),_tplSim:(a,b)=>tplSim(a,b),_relevel:relevel,autofill,_learnLevel:learnLevel,_readLevelDigits:async()=>readLevelDigits(await ensure()),learnLevel,_variants:k=>variants(regions[k]),_readRegion:async k=>readRegion(await ensure(),k),_render:()=>render(),stop,drawBoxes,_parseExp:parseExp,_parseMeso:parseMeso,_st:st,_accExp:acceptExp,_reqNow:reqNow,_accMeso:acceptMeso,_repairExp:v=>repairExp(v),_fitLevels:fitLevels,_setHint:h=>{levelHint=h;},_misses:()=>misses,_keepMiss:keepMiss};
 })();
 
 // two taps within 3 s → start counting again from what is on screen now (regions are kept)
@@ -2368,10 +2488,20 @@ function renderEndForm(){
   const rows=Object.entries(active.items);
   $('e_items').innerHTML=rows.length?`<table><tr><th>ยา</th><th class="num">ตอนเริ่ม</th><th>ซื้อเพิ่มระหว่างเล่น</th><th>เหลือในกระเป๋า</th></tr>${rows.map(([id,v])=>{const it=itemOf(id);
     return `<tr data-id="${esc(id)}"><td>${iname(id,it?.name||id)} <span class="tag ${it?.cat}">${CAT_LABEL[it?.cat]||''}</span></td><td class="num">${fmt(v.start)}</td><td><input class="ib" type="number" inputmode="numeric" value="0" style="width:110px"></td><td><input class="ie" type="number" inputmode="numeric" placeholder="${v.start}" style="width:110px"></td></tr>`;}).join('')}</table>`
-    :'<p class="muted small">รอบนี้ไม่ได้เลือกยาไว้</p>';
+    :usedTable();
   renderDropPicker($('e_drops'),active.mapId,[]);
   renderDropPicker($('e_etc'),active.mapId,[],'etc');
 }
+// no potions ticked at the start: there is no count to subtract from, so ask how many bottles were used (and bought while playing)
+// the usual bottles first (what this character carried last time, then the potions/elixirs); food, buffs and the rest folded away
+function usedTable(){const all=[...allItems().values()].filter(i=>i.cat!=='drop'&&i.cat!=='ammo'),last=Object.keys(charOf(active?.charId)?.last?.items||{});
+  const main=all.filter(i=>last.includes(i.id)||(/potion|elixir/i.test(i.name)&&['hp','mp','hpmp'].includes(i.cat))),rest=all.filter(i=>!main.includes(i));
+  const tr=it=>`<tr data-id="${esc(it.id)}" data-used="1"><td>${iname(it.id,it.name)} <span class="muted small">${it.shop?'ร้าน '+fmt(it.shop):''}</span></td>
+    <td><input class="iu" type="number" inputmode="numeric" min="0" placeholder="0" style="width:90px"></td><td><input class="ib" type="number" inputmode="numeric" min="0" placeholder="0" style="width:90px"></td></tr>`;
+  const head='<tr><th>ยา</th><th>ใช้ไปกี่ขวด</th><th>ซื้อเพิ่มระหว่างเล่น</th></tr>';
+  return `<p class="muted small" style="margin:0 0 6px">ตอนเริ่มไม่ได้ติ๊กยาไว้ — ใส่จำนวนที่<b>ใช้ไป</b>ได้เลย (ไม่ใช้ก็เว้นว่าง) · คิดค่ายาจากราคาร้าน NPC</p>
+  <table class="used">${head}${main.map(tr).join('')}</table>
+  ${rest.length?`<details style="margin-top:8px"><summary class="small">อาหาร บัฟ และอื่น ๆ (${rest.length})</summary><table class="used">${head}${rest.map(tr).join('')}</table></details>`:''}`;}
 function renderDropPicker(box,mapId,existing,kind='rare'){
   const have=new Map((existing||[]).map(d=>[d.id,d]));
   const list=dropsForMap(mapId,kind);const isEtc=kind==='etc';
@@ -2414,7 +2544,7 @@ async function endSession(){
   for(const x of await shotsFor(s.id))await del('shots',x.id);
   const ch=charOf(s.charId);
   if(ch){ch.last={mapId:s.mapId,party:s.party,level:e.level,exp:e.exp,pct:e.pct,mesos:e.mesos,
-    items:Object.fromEntries(Object.entries(items).map(([id,v])=>[id,v.end])),at:s.endTime};await saveChars();}
+    items:Object.fromEntries(Object.entries(items).filter(([,v])=>v.end!=null).map(([id,v])=>[id,v.end])),at:s.endTime};await saveChars();}
   active=null;clearInterval(autoTimer);
   ['e_exp','e_pct','e_mesos','e_note'].forEach(i=>$(i).value='');['e_deaths','e_charm'].forEach(i=>$(i).value='0');
   fillCharSelect($('s_char'),s.charId);prefillFromChar(ch);renderStartItems();showActive();
@@ -2702,36 +2832,51 @@ function buildEnd(){
   if(e.exp==null)e.exp=expAt(e);
   if(e.exp==null||e.mesos==null)return {err:'กรอก EXP (หรือ % กับเลเวล) และเงิน ตอนจบรอบด้วยนะคะ'};
   const items=structuredClone(active.items);const missing=[];
-  $('e_items').querySelectorAll('tr[data-id]').forEach(tr=>{const v=items[tr.dataset.id];v.bought=num(tr.querySelector('.ib').value)||0;
+  $('e_items').querySelectorAll('tr[data-id]').forEach(tr=>{
+    if(tr.dataset.used){const u=num(tr.querySelector('.iu').value),b=num(tr.querySelector('.ib').value)||0;   // "used" mode: only the bottles entered
+      if((u||0)>0||b>0)items[tr.dataset.id]={start:null,end:null,used:u||0,bought:b};return;}
+    const v=items[tr.dataset.id];v.bought=num(tr.querySelector('.ib').value)||0;
     v.end=num(tr.querySelector('.ie').value);if(v.end==null)missing.push(itemOf(tr.dataset.id)?.name);});
   // potions are optional: one left empty is simply not counted (no cost, no profit line for it)
   const s={...active,items,end:e,endTime:Date.now()};s.prices=snapshotPrices(s);
   return {s,e,items};
 }
-/* ===================== chat translation (on-device, Chrome) ===================== */
-const CHAT={seen:new Map(),tr:{},det:null,timer:null,busy:false};
+/* ===================== game chat: read, keep, translate non-English (on-device, Chrome) ===================== */
+// English is shown as read: trade talk (S> B> c/o a/w wg gfa 60%…) comes out wrong from a translator (Harry's call).
+// Korean / Japanese / Chinese are translated to Thai on this device. Lines that scrolled off the game's 4–5 line box stay here.
+const CHAT={seen:new Map(),tr:{},det:null,timer:null,busy:false,find:''};const CHAT_MAX=150;
 const within=(pr,ms)=>Promise.race([pr,new Promise((_,rej)=>setTimeout(()=>rej(new Error('timeout')),ms))]);   // a model download that never starts must not hang the panel
-const chatLang=t=>/[가-힣]/.test(t)?'ko':/[\u3040-\u30ff]/.test(t)?'ja':/[\u4e00-\u9fff]/.test(t)?'zh':'en';
+const chatLang=t=>/[가-힣]{2,}/.test(t)?'ko':/[぀-ヿ]{2,}/.test(t)?'ja':/[一-鿿]{2,}/.test(t)?'zh':'en';
 async function chatTranslate(text){
-  let src=chatLang(text);
-  if(src==='en'&&'LanguageDetector' in self){try{CHAT.det=CHAT.det||await within(LanguageDetector.create(),8000);const r=(await within(CHAT.det.detect(text),4000))[0];if(r&&r.confidence>0.6)src=r.detectedLanguage;}catch(e){}}
-  if(/^zh-Latn|^und/.test(src))return {src,th:null,note:'น่าจะเป็นภาษาจีนพิมพ์แบบอ่านออกเสียง — ยังแปลไม่ได้'};
-  src=src.split('-')[0];if(src==='th')return {src,th:text};
+  const src=chatLang(text);if(src==='en')return {src,th:null};
   if(!('Translator' in self))return {src,th:null,note:'เบราว์เซอร์นี้ยังแปลไม่ได้ — ใช้ Chrome รุ่นใหม่'};
-  try{if(!CHAT.tr[src]){const av=await within(Translator.availability({sourceLanguage:src,targetLanguage:'th'}),5000);if(av==='unavailable')return {src,th:null,note:`แปล ${src} → ไทย ไม่ได้ในเครื่องนี้`};
-      CHAT.tr[src]=await within(Translator.create({sourceLanguage:src,targetLanguage:'th',monitor(m){m.addEventListener('downloadprogress',e=>{$('chatNote').textContent=`กำลังโหลดตัวแปล ${src} → ไทย ${Math.round((e.loaded||0)*100)}% (ครั้งแรกครั้งเดียว)`;});}}),120000);}
-    return {src,th:await within(CHAT.tr[src].translate(text),10000)};}catch(e){return {src,th:null,note:'แปลไม่สำเร็จ: '+(e.message||e)};}}
+  for(let k=0;k<2;k++){   // the on-device translator sometimes fails once ("Other generic failures occurred"): make a fresh one and try again
+    try{if(!CHAT.tr[src]){const av=await within(Translator.availability({sourceLanguage:src,targetLanguage:'th'}),5000);if(av==='unavailable')return {src,th:null,note:`แปล ${src} → ไทย ไม่ได้ในเครื่องนี้`};
+        CHAT.tr[src]=await within(Translator.create({sourceLanguage:src,targetLanguage:'th',monitor(m){m.addEventListener('downloadprogress',e=>{$('chatNote').textContent=`กำลังโหลดตัวแปล ${src} → ไทย ${Math.round((e.loaded||0)*100)}% (ครั้งแรกครั้งเดียว)`;});}}),120000);}
+      return {src,th:await within(CHAT.tr[src].translate(text),10000)};}
+    catch(e){try{CHAT.tr[src]?.destroy?.();}catch(_){}delete CHAT.tr[src];if(k)return {src,th:null,note:'แปลไม่สำเร็จ: '+(e.message||e)};}}}
+// the same message read twice (one letter different, or longer once its second line came into view) is one message
+function chatSim(a,b){const g=t=>{const s=t.toLowerCase().replace(/[^a-z0-9가-힣]/g,''),m=new Map();for(let i=0;i<s.length-1;i++){const k=s.slice(i,i+2);m.set(k,(m.get(k)||0)+1);}return [m,Math.max(1,s.length-1)];};
+  const [A,na]=g(a),[B,nb]=g(b);let o=0;for(const [k,v] of A)o+=Math.min(v,B.get(k)||0);return 2*o/(na+nb);}
+function chatFindSame(l){for(const [k,m] of CHAT.seen){if(m.time!==l.time)continue;
+    if((m.name&&l.name&&chatSim(m.name,l.name)<0.6))continue;
+    const a=m.msg,b=l.msg;if(chatSim(a,b)>=0.75||(a.length>8&&b.startsWith(a.slice(0,Math.min(a.length,30))))||(b.length>8&&a.startsWith(b.slice(0,Math.min(b.length,30)))))return k;}return null;}
+function chatRender(){const f=CHAT.find.trim().toLowerCase(),list=[...CHAT.seen.values()].filter(m=>!f||(m.name+' '+m.msg+' '+(m.th||'')).toLowerCase().includes(f));
+  $('chatList').innerHTML=list.map(m=>`<li><span class="muted small">${esc(m.time)}</span> ${m.name?`<span class="who">${esc(m.name)}</span>`:''}${m.ch!=null?`<span class="ch">CH${esc(String(m.ch).padStart(2,'0'))}</span>`:''}${m.src&&m.src!=='en'?` <span class="muted small">${esc(m.src)}</span>`:''}
+    ${m.src&&m.src!=='en'?`<div class="msg">${m.th!=null?esc(m.th):`<span class="muted">${esc(m.note||'')}</span>`}</div><div class="orig">${esc(m.msg)}</div>`:`<div class="msg">${esc(m.msg)}</div>`}</li>`).join('')||(f?'<li class="muted small">ไม่เจอข้อความที่มีคำนี้</li>':'');
+  if(!f)$('chatList').scrollTop=1e9;}
 async function chatRun(){if(CHAT.busy)return;CHAT.busy=true;const note=$('chatNote');
   try{note.textContent='กำลังอ่านช่องแชท…';const r=await OCR.readChat();if(r.err){note.textContent='⚠️ '+r.err;return;}
     if(!r.lines.length){note.textContent='ไม่เจอข้อความในช่องแชท — ช่องแชทต้องอยู่ที่เดิมเหนือแถบ HP/MP';return;}
-    let added=0;for(const l of r.lines){const key=l.time+'|'+l.name+'|'+l.msg;if(CHAT.seen.has(key))continue;const t=await chatTranslate(l.msg);CHAT.seen.set(key,{...l,...t});added++;}
-    while(CHAT.seen.size>40)CHAT.seen.delete(CHAT.seen.keys().next().value);
-    $('chatList').innerHTML=[...CHAT.seen.values()].map(m=>`<li><span class="muted small">${esc(m.time)}</span> <span class="who">${esc(m.name||'?')}</span> <span class="muted small">${esc(m.src||'')}</span>
-      <div class="th">${m.th!=null?esc(m.th):`<span class="muted">${esc(m.note||'')}</span>`}</div>${m.th!==m.msg?`<div class="orig">${esc(m.msg)}</div>`:''}</li>`).join('');
-    $('chatList').scrollTop=1e9;note.textContent=`อ่านได้ ${r.lines.length} บรรทัด${added?` · ใหม่ ${added}`:''} · ${new Date().toLocaleTimeString('th-TH')}`;}
+    let added=0;for(const l of r.lines){const k=chatFindSame(l);
+      if(k!=null){const m=CHAT.seen.get(k);if(l.msg.length>m.msg.length+3){const t=await chatTranslate(l.msg);CHAT.seen.set(k,{...m,...l,ch:l.ch??m.ch,...t});}else if(m.ch==null&&l.ch!=null)m.ch=l.ch;continue;}
+      const t=await chatTranslate(l.msg);CHAT.seen.set(l.time+'|'+l.name+'|'+l.msg,{...l,...t});added++;}
+    while(CHAT.seen.size>CHAT_MAX)CHAT.seen.delete(CHAT.seen.keys().next().value);
+    chatRender();note.textContent=`อ่านได้ ${r.lines.length} บรรทัด${added?` · ใหม่ ${added}`:''} · เก็บไว้ ${CHAT.seen.size} · ${new Date().toLocaleTimeString('th-TH')}`;}
   catch(e){note.textContent='⚠️ '+(e.message||e);}finally{CHAT.busy=false;}}
 $('chatGo')?.addEventListener('click',chatRun);
-$('chatAuto')?.addEventListener('change',e=>{clearInterval(CHAT.timer);CHAT.timer=e.target.checked?setInterval(chatRun,10000):null;if(e.target.checked)chatRun();});
+$('chatAuto')?.addEventListener('change',e=>{clearInterval(CHAT.timer);CHAT.timer=e.target.checked?setInterval(chatRun,5000):null;if(e.target.checked)chatRun();});
+$('chatFind')?.addEventListener('input',e=>{CHAT.find=e.target.value;chatRender();});
 /* ---- bottom-right notices: on/off, rare-drop alert, drops filled in at quit ---- */
 try{const v=localStorage.getItem('lb_msgOn');if(v==='0'){$('msgOn').checked=false;OCR.setMsgOn(false);}}catch(e){}
 $('msgOn')?.addEventListener('change',e=>{OCR.setMsgOn(e.target.checked);try{localStorage.setItem('lb_msgOn',e.target.checked?'1':'0');}catch(_){}});
@@ -2782,12 +2927,12 @@ function renderEndReview(){
   const r=buildEnd();if(r.err){$('e_review').innerHTML=`<p class="bad">${esc(r.err)}</p>`;return;}
   const c=calc(r.s),t=tierOf(c.profitHr);
   const row=(k,v,go)=>`<div class="rv"><span class="k">${k}</span><span class="v">${v}</span>${go?`<button type="button" class="ed" data-go="${go}">แก้ไข</button>`:''}</div>`;
-  $('e_review').innerHTML=`<div class="tierline"><img alt="" src="${COIN_IMG[t.coin]}"><div><span class="muted small">ระดับรอบนี้</span><br><b style="color:${t.color}">${t.name}</b></div><div style="margin-left:auto;text-align:right"><span class="muted small">กำไร/ชม.</span><br><b class="${(c.profitHr??0)>=0?'good':'bad'}">${fmtK(c.profitHr)}</b></div></div>
+  $('e_review').innerHTML=`<div class="tierline"><img alt="" src="${COIN_IMG[t.coin]}"><div><span class="muted small">ระดับรอบนี้</span><br><b style="color:${t.color}">${t.name}</b></div><div style="margin-left:auto;text-align:right"><span class="muted small">กำไร/ชม.</span><br><b class="${(c.profitHr??0)>=0?'good':'bad'}">${fmtK(c.profitHr)}</b>${c.potionCost?'':'<br><span class="nocost">ยังไม่หักค่ายา</span>'}</div></div>
    <div class="review">
     ${row('เวลาเล่น',dur(r.s.endTime-r.s.startTime))}
     ${row('EXP',`${fmt(c.exp)} · ${fmtK(c.expHr)}/ชม. · Lv.${esc(r.s.start.level)} → ${esc(r.e.level??r.s.start.level)}`,'values')}
     ${row('Meso',`${fmt(c.farmMesos)} · ${fmtK(c.hours&&c.farmMesos!=null?c.farmMesos/c.hours:null)}/ชม.`,'values')}
-    ${Object.keys(r.s.items||{}).length?row('ยา',c.potionCost?`ค่ายา ${fmt(c.potionCost)} · กำไรหลังหักค่ายา ${fmt(c.profit)}`:'<span class="muted">ไม่ได้ใส่ที่เหลือ (ไม่บังคับ)</span>','potions'):''}
+    ${row('ยา',c.potionCost?`ค่ายา ${fmt(c.potionCost)} · กำไรหลังหักค่ายา ${fmt(c.profit)}`:'<span class="muted">ยังไม่ได้ใส่ (ไม่บังคับ)</span>','potions')}
     ${row('ของดรอป',r.e.drops.length?r.e.drops.map(d=>`<span class="chip iname">${ico(d.id,16)}${esc(d.name)} ×${d.qty}</span>`).join(' '):'<span class="muted">ไม่ได้ใส่ (ไม่บังคับ)</span>','drops')}
     ${row('ETC',r.e.etc.length?r.e.etc.map(d=>`<span class="chip iname">${ico(d.id,16)}${esc(d.name)} ×${d.qty}</span>`).join(' '):'<span class="muted">ไม่ได้ใส่ (ไม่บังคับ)</span>','etc')}
     ${row('มูลค่าของที่ได้',`${fmt(c.itemValue)} <span class="muted small">(ยังไม่ขาย · ไม่รวมในกำไร)</span>`)}
@@ -2932,9 +3077,15 @@ $('themeBtn').onclick=cycleTheme;applyTheme(getTheme());
 // release — tests/version-bump.js fails when index.html changed but the version didn't.
 // The check asks GitHub Pages for this same page (no cache) and compares the version written in it; nothing is sent.
 // It never reloads by itself: a reload ends the round being counted.
-const APP_VERSION='2026.11.14';
+const APP_VERSION='2026.11.15';
 const WHATS_NEW=[
-  {v:'2026.11.14',items:['ป้ายเวอร์ชันบนหัวเว็บ: บอกว่าเป็นเวอร์ชันล่าสุดไหม มีของใหม่กดโหลดได้เลย']},
+  {v:'2026.11.15',items:['ป้ายเวอร์ชันบนหัวเว็บ: บอกว่าเป็นเวอร์ชันล่าสุดไหม มีของใหม่กดโหลดได้เลย',
+    'EXP: อ่านเลขที่ขึ้นต้นด้วย 1 (เช่น 177,881) ได้ถูกแล้ว และจับการอัปเลเวลได้ — เดิมอ่านเป็น % แล้วคิดว่ายังเป็นเลเวลเก่า',
+    'EXP: ถ้าจอยังโชว์ตัวเลข จะไม่เชื่อ % ที่อ่านเพี้ยนจนเกินล้านอีก',
+    'แชท: อ่านตามรูปแบบ [เวลา] ชื่อ CH : ข้อความ · โชว์แชนแนล · ชื่อไอเทมในวงเล็บไม่หาย · ข้อความ 2 บรรทัดต่อกันให้ · ไม่มีตัวเกาหลีปลอม',
+    'แชท: ภาษาอังกฤษไม่แปลแล้ว (ศัพท์เทรดแปลแล้วเพี้ยน) · เก็บย้อนหลัง 150 ข้อความ มีช่องค้นหา · อ่านเองทุก 5 วิ',
+    'ยา: ถ้าตอนเริ่มไม่ได้ติ๊ก ใส่ "ใช้ไปกี่ขวด" ตอนจบได้ · หน้าสรุปบอกถ้ายังไม่หักค่ายา',
+    'ปุ่ม 💾 เก็บภาพทดสอบ แนบภาพตัวเลขที่อ่านพลาดล่าสุดไปด้วย (อยู่ในเครื่องเท่านั้น)']},
   {v:'2026.11.12',items:['ป้ายและเสียงเตือนเมื่อเก็บอุปกรณ์ (Equip) หรือสกรอลได้ พร้อมปุ่มปิดเสียงแยก',
     'อ่านข้อความขวาล่างได้บนแมพพื้นสว่างหรือพื้นลาย เช่นหินที่ Free Market',
     'ชื่อไอเทมที่เกมตัดเป็น "..." เติมชื่อเต็มจากของที่มอนในแมพนั้นดรอป',

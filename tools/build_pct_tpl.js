@@ -3,7 +3,10 @@
 const {chromium}=require('playwright');const fs=require('fs');
 const SRC=[{img:'fixtures/real-full-68.png',pct:'5803'},{img:'fixtures/real-full-70.png',pct:'5999'},
   {img:'fixtures/real-exp-pct-only.png',pct:'8230',box:[10,24,150,24]},{img:'fixtures/real-hud-63-913621.png',pct:'6434',box:[820,62,200,28]},
-  {img:'fixtures/real-hud-63-full.jpg',pct:'286',box:[765,782,140,32]}];
+  {img:'fixtures/real-hud-63-full.jpg',pct:'286',box:[765,782,140,32]},
+  // Lv.75 (Nov 15): "177,881 [6.60%]" etc. — the first 7s and 1s the built-in set has seen
+  {img:'fixtures/real-exp-75a.png',pct:'660',box:[8,4,248,32]},{img:'fixtures/real-exp-75b.png',pct:'712',box:[8,4,248,32]},
+  {img:'fixtures/real-exp-75c.png',pct:'750',box:[8,4,248,32]},{img:'fixtures/real-exp-75d.png',pct:'769',box:[8,4,248,32]}];
 (async()=>{const b=await chromium.launch();const ctx=await b.newContext();await ctx.addInitScript(()=>{window.LB_OCR={src:'/node_modules/tesseract.js/dist/tesseract.min.js',workerPath:'/node_modules/tesseract.js/dist/worker.min.js',corePath:'/node_modules/tesseract.js-core',langPath:'/node_modules/@tesseract.js-data/eng/4.0.0_best_int'};});
 const p=await ctx.newPage();await p.goto('http://localhost:8123/index.html');await p.waitForTimeout(800);
 const out=await p.evaluate(async SRC=>{const acc={};let cv=document.createElement('canvas'),g=cv.getContext('2d'),im=null;const d=()=>{if(im)g.drawImage(im,0,0,cv.width,cv.height);requestAnimationFrame(d);};d();
