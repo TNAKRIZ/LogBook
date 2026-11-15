@@ -2364,9 +2364,11 @@ body.compact{padding:4px 8px;justify-content:center}body.compact .hd,body.compac
       cell('eta','อัปเลเวลในอีก',L.eta!=null?eta(L.eta):'–')+
       cell('meso','Meso/ชม.',L.hasMeso?(L.mesoEst?'≈':'')+fmtK(L.mesoHr):'–',note(L,'meso'));
     const from=active?.startTime||L.t0,farm=L.activeMs>0;      // the farming clock (what the rates use); wall time only before any EXP
-    ft.innerHTML=`<span><span class="dot ${L.on?'on':''}"></span>${L.on?'กำลังอ่านจอ':'ยังไม่ได้เปิดอ่าน'}</span><span>⏱ ${farm?'ฟาร์มไป':'อ่านมา'} <span class="clock">${farm?hms(L.activeMs):from?hms(Date.now()-from):'0:00:00'}</span></span>`;
+    // the real time where the player is (this computer's own time zone; the server time is already in the game chat)
+    const now=new Date().toLocaleTimeString('th-TH',{hour:'2-digit',minute:'2-digit',hour12:false});
+    ft.innerHTML=`<span><span class="dot ${L.on?'on':''}"></span>${L.on?'กำลังอ่านจอ':'ยังไม่ได้เปิดอ่าน'}</span><span title="เวลาตอนนี้ (ตามเครื่องนี้)">🕒 <span class="clock">${now}</span></span><span>⏱ ${farm?'ฟาร์มไป':'อ่านมา'} <span class="clock">${farm?hms(L.activeMs):from?hms(Date.now()-from):'0:00:00'}</span></span>`;
     const sep='<span class="sep">·</span>',warn=L.errExp>=3||L.errMeso>=3?' <span class="warn">⚠</span>':'';
-    d.getElementById('bar').innerHTML=`<img alt="" src="${LOGO_IMG.book}"><span class="dot ${L.on?'on':''}"></span>`+
+    d.getElementById('bar').innerHTML=`<img alt="" src="${LOGO_IMG.book}"><span class="dot ${L.on?'on':''}"></span><span>🕒 <span class="clock">${now}</span></span>${sep}`+
       `<span>EXP <span class="v e">${fmtK(L.expHr)}</span>/ชม.</span>${sep}<span><span class="v">${L.pctHr!=null?L.pctHr.toFixed(2)+'%':'–'}</span>/ชม.</span>${sep}`+
       `<span>อัปอีก <span class="v t">${L.eta!=null?eta(L.eta):'–'}</span></span>`+(L.hasMeso?`${sep}<span>Meso <span class="v m">${L.mesoEst?'≈':''}${fmtK(L.mesoHr)}</span>/ชม.</span>`:'')+
       `${sep}<span>⏱ <span class="clock">${from?hms(Date.now()-from):'0:00:00'}</span></span>${warn}`;
@@ -3090,8 +3092,9 @@ $('themeBtn').onclick=cycleTheme;applyTheme(getTheme());
 // release — tests/version-bump.js fails when index.html changed but the version didn't.
 // The check asks GitHub Pages for this same page (no cache) and compares the version written in it; nothing is sent.
 // It never reloads by itself: a reload ends the round being counted.
-const APP_VERSION='2026.11.15b';
+const APP_VERSION='2026.11.15c';
 const WHATS_NEW=[
+  {v:'2026.11.15c',items:['หน้าต่างลอย: มีนาฬิกาเวลาจริง 🕒 ตามโซนเวลาของเครื่องที่เปิดอยู่ ทั้งแบบเต็มและแถบเล็ก (ในแถบเล็กอยู่หน้าสุด ไม่โดนตัดตอนหน้าต่างแคบ)']},
   {v:'2026.11.15b',items:['Meso: แก้อ่านได้เลขสั้นผิด ๆ (17, 222, 303) — แม่แบบตัวเลขที่จำผิดถูกล้างและเรียนใหม่แบบเข้มขึ้น ตอนเริ่มรอบอ่านด้วยตัวอ่านปกติเสมอ']},
   {v:'2026.11.15',items:['ป้ายเวอร์ชันบนหัวเว็บ: บอกว่าเป็นเวอร์ชันล่าสุดไหม มีของใหม่กดโหลดได้เลย',
     'EXP: อ่านเลขที่ขึ้นต้นด้วย 1 (เช่น 177,881) ได้ถูกแล้ว และจับการอัปเลเวลได้ — เดิมอ่านเป็น % แล้วคิดว่ายังเป็นเลเวลเก่า',
