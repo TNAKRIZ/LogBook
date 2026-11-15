@@ -1416,6 +1416,11 @@ const OCR=(()=>{
     for(let i=1;i<=a.length;i++)for(let j=1;j<=b.length;j++)d[i][j]=Math.min(d[i-1][j]+1,d[i][j-1]+1,d[i-1][j-1]+(a[i-1]===b[j-1]?0:1));return d[a.length][b.length];};
   const near=(a,b)=>lev(a,b)<=(b.length>=7?2:b.length>=4?1:0);
   const nameKey=t=>String(t).toLowerCase().replace(/rn/g,'m').replace(/[l1|!]/g,'i').replace(/0/g,'o').replace(/5/g,'s');
+  function nameFits(read,name){const a=nameKey(read),b=nameKey(name);if(a===b)return true;
+    const subs=(x,y)=>{let n=0;for(let i=0;i<x.length;i++)if(x[i]!==y[i])n++;return n;},max=b.length>=7?2:b.length>=4?1:0;
+    if(a.length===b.length)return subs(a,b)<=max;                                    // letters misread, nothing added or lost
+    if(a.length===b.length-1&&b.length>=5)return subs(a,b.slice(1))<=max-1;            // the first glyph lost at the box edge
+    return false;}
   // what the HUD may show → our job / branch
   const JOB_WORDS=[['Beginner',null,null],['Warrior','warrior',null],['Fighter','warrior','Fighter'],['Page','warrior','Page'],['Spearman','warrior','Spearman'],
     ['Magician','magician',null],['Cleric','magician','Cleric'],['Wizard','magician',null],['Thief','thief',null],['Assassin','thief','Assassin'],['Bandit','thief','Bandit'],
@@ -1430,10 +1435,14 @@ const OCR=(()=>{
       for(const tk of toks){const j=JOB_WORDS.find(([w])=>near(tk,w));if(j){jobHit=j;break;}}
       if(jobHit){let br=jobHit[2];if(jobHit[0]==='Wizard')br=/fire|poison|f\s*\/\s*p/i.test(t)?'F/P Wizard':/ice|light|i\s*\/\s*l/i.test(t)?'I/L Wizard':null;add('job',jobHit[1]+'|'+(br||''));}
       for(const tk of toks){if(/^\d+$/.test(tk)||/^l?v$/i.test(tk)||JOB_WORDS.some(([w])=>near(tk,w))||tk.length>13)continue;
-        // a saved character only when the name on screen IS that name (up to look-alike glyphs Tesseract mixes up: l/I/1, O/0, rn/m):
-        // no "close enough" and no matching the end of a longer name — THANAKRIZ is not TNAKRIZ (Harry: analyse afresh every time,
-        // anyone may use this page)
-        const k=known.find(c=>nameKey(tk)===nameKey(c.name));
+        // a saved character only when the name on screen can BE that name as Tesseract misreads it: the same length with a letter
+        // or two swapped ("1nakriz", "1yakriz" for Tnakriz), or the first glyph lost ("nakriz"). Never a LONGER name or one that
+        // only shares its ending — THANAKRIZ is not TNAKRIZ (Harry: analyse afresh every time, anyone may use this page).
+        // A swapped letter could also be another player's name: detectWho drops the match when job or level disagree.
+        const k=known.find(c=>nameFits(tk,c.name));
+        // only the end of a saved name ("riz", "qariz" for Tnakriz): too little to say whose it is — no name rather than a guess
+        // (not that character, and not a new one called "riz"); the player picks
+        if(!k&&known.some(c=>{const a=nameKey(tk),b=nameKey(c.name);return a.length<b.length&&b.endsWith(a.slice(-Math.min(a.length,3)));}))continue;
         add('name',k?k.name:tk);}
     }
     const best=k=>{let b=null,n=0;for(const [key,c] of vote)if(key.startsWith(k+':')&&c>n){n=c;b=key.slice(k.length+1);}return b;};
@@ -1441,7 +1450,7 @@ const OCR=(()=>{
       const kn=names.find(x=>known.some(c=>c.name===x.n));if(kn)return kn.n;                     // a known profile always wins
       let top=null,tc=0;for(const a of names){const grp=names.filter(b=>lev(a.n,b.n)<=2);const c=grp.reduce((s,x)=>s+x.c,0);
         const longest=grp.sort((x,y)=>y.n.length-x.n.length)[0].n;if(c>tc||(c===tc&&longest.length>(top||'').length)){tc=c;top=longest;}}
-      return top;};
+      return tc>=2?top:null;};   // a NEW name needs two reads that agree — one stray read ("Tike", "qariz") is no name, the player picks
     const lv=best('level'),jb=best('job'),nm=bestName();
     return {level:lv?+lv:null,job:jb?jb.split('|')[0]||null:null,branch:jb?jb.split('|')[1]||null:null,name:nm,
       char:nm?known.find(c=>c.name===nm)||null:null};

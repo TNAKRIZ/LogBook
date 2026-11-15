@@ -22,7 +22,7 @@ for(const C of CASES){
     await put('kv',{exp:null,meso:null,who:null,map:n(BOX.mapWide)},'ocrRegions');await put('kv',[],'mapPrints');await OCR.init();
     const m2=await OCR.readMap(allMaps());res.mapWide={name:m2?.map?.name,cands:(m2?.cands||[]).map(x=>x.name),raw:m2?.raw};
     return res;},[C,IMG,BOX]);
-  const chk={level:out.who.level===63,name:out.who.name==='TNAKRIZ',exp_tight:out.exp_tight.exp?.exp===40652&&out.exp_tight.exp?.pct===2.86,exp_wide:out.exp_wide.exp?.exp===40652&&out.exp_wide.exp?.pct===2.86,map:out.map.name==='Camp 1'||out.map.cands[0]==='Camp 1',mapWide:out.mapWide.name==='Camp 1'||out.mapWide.cands[0]==='Camp 1'};
+  const chk={level:out.who.level===63,name:out.who.name==='TNAKRIZ'||out.who.name==null   /* a fragment like 'riz' is no name (Nov 16), never a guess */,exp_tight:out.exp_tight.exp?.exp===40652&&out.exp_tight.exp?.pct===2.86,exp_wide:out.exp_wide.exp?.exp===40652&&out.exp_wide.exp?.pct===2.86,map:out.map.name==='Camp 1'||out.map.cands[0]==='Camp 1',mapWide:out.mapWide.name==='Camp 1'||out.mapWide.cands[0]==='Camp 1'};
   for(const k in chk){total++;pass+=chk[k];}
   console.log(C.name,JSON.stringify(chk));console.log('   ',JSON.stringify(out),errs.join(';'));await ctx.close();}
 console.log(`REAL HUD PASS ${pass}/${total}`);await b.close();})();

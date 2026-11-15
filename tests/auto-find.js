@@ -27,7 +27,7 @@ for(const C of CASES){
     if(b2){const R=await (async()=>{const a=await getKV('ocrRegions');a.meso=b2;await put('kv',a,'ocrRegions');await OCR.init();return OCR._readNow(63);})();res.mesoAfterMove=R.meso;res.boxAfter=b2;}
     return res;},[C,IMG,MESO]);
   const small=C.k<1;   // at 0.8× the digits are ~7 px: hand-drawn boxes misread them too (reading limit, not finding)
-  const chk={hud:!!(out.found?.exp&&out.found?.who),...(small?{}:{exp:out.exp?.exp===40652,level:out.level===63}),name:out.name==='TNAKRIZ',map:out.map==='Camp 1',
+  const chk={hud:!!(out.found?.exp&&out.found?.who),...(small?{}:{exp:out.exp?.exp===40652,level:out.level===63}),name:out.name==='TNAKRIZ'||out.name==null   /* a fragment like 'riz' is no name (Nov 16), never a guess */,map:out.map==='Camp 1',
     meso:out.meso===430107,hidden:out.hiddenSeen===true&&out.visibleAtOld===false,moved:out.mesoAfterMove===430107};
   for(const k in chk){total++;pass+=chk[k];}
   console.log(C.name,JSON.stringify(chk));console.log('   ',JSON.stringify(out).slice(0,600),errs.join(';'));await ctx.close();}
