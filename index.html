@@ -2313,6 +2313,9 @@ body{font:14px/1.3 "Noto Sans Thai","Leelawadee UI",Tahoma,system-ui,sans-serif;
 .dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:5px;background:#bbb;vertical-align:1px}
 .dot.on{background:#3fae4f;box-shadow:0 0 0 3px rgba(63,174,79,.25)}.warn{color:#bf3324}
 .rs{position:fixed;top:5px;right:64px;border:2px solid #0a0f24;background:#fff6e6;color:#141c3c;border-radius:6px;font:700 11px system-ui;padding:2px 6px;cursor:pointer;z-index:2}.rs.armed{background:#bf3324;color:#fff}body.compact .rs{right:64px}
+.tz{position:fixed;top:6px;left:8px;display:flex;flex-direction:column;align-items:flex-start;line-height:1.05;z-index:2}
+.tz b{font:800 17px "IBM Plex Sans Thai","Leelawadee UI",system-ui,sans-serif;font-variant-numeric:tabular-nums;color:#3a2817}.tz i{font:700 10px system-ui;font-style:normal;color:#8a6c50;letter-spacing:.2px}
+body.compact .tz{display:none}
 .tg{position:fixed;top:5px;right:5px;border:2px solid #0a0f24;background:#141c3c;color:#fff;border-radius:6px;font:700 11px system-ui;padding:2px 6px;cursor:pointer;z-index:2}
 .bar{display:none;align-items:center;gap:10px;height:100%;padding-right:46px;white-space:nowrap;overflow:hidden;font-weight:700;font-size:clamp(12px,3.2vw,17px)}
 .bar img{height:28px}.bar .v{font-weight:800}.bar .sep{color:#d0b48c}.bar .e{color:#2f7d3a}.bar .m{color:#a87405}.bar .t{color:#c0561a}
@@ -2345,7 +2348,7 @@ body.compact{padding:4px 8px;justify-content:center}body.compact .hd,body.compac
     const d=w.document;d.title='LogBook · สด';
     d.head.innerHTML=`<meta charset="utf-8"><link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@500;600;700&display=swap" rel="stylesheet"><style>${CSS}</style>`;
     document.querySelectorAll('link[rel=stylesheet]').forEach(l=>d.head.appendChild(l.cloneNode()));
-    d.body.innerHTML=`<button class="rs" id="rs" title="เริ่มนับใหม่จากตอนนี้ (กด 2 ครั้ง)">↺</button><button class="tg" id="tg" title="สลับแบบเต็ม / แถบเล็ก"></button><div class="hd"><img class="bk" alt="" src="${LOGO_IMG.book}"><img class="wm" alt="LogBook" src="${LOGO_IMG.word}"></div><div class="g" id="g"></div><div class="ft" id="ft"></div><div class="bar" id="bar"></div>`;
+    d.body.innerHTML=`<div class="tz" id="tz" title="เวลาตอนนี้ ตามโซนเวลาของเครื่องนี้"></div><button class="rs" id="rs" title="เริ่มนับใหม่จากตอนนี้ (กด 2 ครั้ง)">↺</button><button class="tg" id="tg" title="สลับแบบเต็ม / แถบเล็ก"></button><div class="hd"><img class="bk" alt="" src="${LOGO_IMG.book}"><img class="wm" alt="LogBook" src="${LOGO_IMG.word}"></div><div class="g" id="g"></div><div class="ft" id="ft"></div><div class="bar" id="bar"></div>`;
     d.getElementById('tg').onclick=()=>{setMode(mode==='compact'?'full':'compact');try{w.resizeTo(...SIZE[mode]);}catch(e){}};
     armReset(d.getElementById('rs'),'↺','กดอีกครั้ง');
     setMode(mode);
@@ -2364,11 +2367,14 @@ body.compact{padding:4px 8px;justify-content:center}body.compact .hd,body.compac
       cell('eta','อัปเลเวลในอีก',L.eta!=null?eta(L.eta):'–')+
       cell('meso','Meso/ชม.',L.hasMeso?(L.mesoEst?'≈':'')+fmtK(L.mesoHr):'–',note(L,'meso'));
     const from=active?.startTime||L.t0,farm=L.activeMs>0;      // the farming clock (what the rates use); wall time only before any EXP
-    // the real time where the player is (this computer's own time zone; the server time is already in the game chat)
-    const now=new Date().toLocaleTimeString('th-TH',{hour:'2-digit',minute:'2-digit',hour12:false});
-    ft.innerHTML=`<span><span class="dot ${L.on?'on':''}"></span>${L.on?'กำลังอ่านจอ':'ยังไม่ได้เปิดอ่าน'}</span><span title="เวลาตอนนี้ (ตามเครื่องนี้)">🕒 <span class="clock">${now}</span></span><span>⏱ ${farm?'ฟาร์มไป':'อ่านมา'} <span class="clock">${farm?hms(L.activeMs):from?hms(Date.now()-from):'0:00:00'}</span></span>`;
+    // the real time where the player is, top-left with a globe and the zone (this computer's own time zone — friends abroad see
+    // theirs; the server time is already in the game chat)
+    const D=new Date(),now=D.toLocaleTimeString('th-TH',{hour:'2-digit',minute:'2-digit',hour12:false}),
+      zone=(new Intl.DateTimeFormat('en-GB',{timeZoneName:'short'}).formatToParts(D).find(x=>x.type==='timeZoneName')||{}).value||'';
+    d.getElementById('tz').innerHTML=`<b>🌐 ${now}</b><i>${esc(zone)}</i>`;
+    ft.innerHTML=`<span><span class="dot ${L.on?'on':''}"></span>${L.on?'กำลังอ่านจอ':'ยังไม่ได้เปิดอ่าน'}</span><span>⏱ ${farm?'ฟาร์มไป':'อ่านมา'} <span class="clock">${farm?hms(L.activeMs):from?hms(Date.now()-from):'0:00:00'}</span></span>`;
     const sep='<span class="sep">·</span>',warn=L.errExp>=3||L.errMeso>=3?' <span class="warn">⚠</span>':'';
-    d.getElementById('bar').innerHTML=`<img alt="" src="${LOGO_IMG.book}"><span class="dot ${L.on?'on':''}"></span><span>🕒 <span class="clock">${now}</span></span>${sep}`+
+    d.getElementById('bar').innerHTML=`<img alt="" src="${LOGO_IMG.book}"><span class="dot ${L.on?'on':''}"></span><span title="เวลาตอนนี้ (${esc(zone)})">🌐 <span class="clock">${now}</span></span>${sep}`+
       `<span>EXP <span class="v e">${fmtK(L.expHr)}</span>/ชม.</span>${sep}<span><span class="v">${L.pctHr!=null?L.pctHr.toFixed(2)+'%':'–'}</span>/ชม.</span>${sep}`+
       `<span>อัปอีก <span class="v t">${L.eta!=null?eta(L.eta):'–'}</span></span>`+(L.hasMeso?`${sep}<span>Meso <span class="v m">${L.mesoEst?'≈':''}${fmtK(L.mesoHr)}</span>/ชม.</span>`:'')+
       `${sep}<span>⏱ <span class="clock">${from?hms(Date.now()-from):'0:00:00'}</span></span>${warn}`;
@@ -3094,7 +3100,7 @@ $('themeBtn').onclick=cycleTheme;applyTheme(getTheme());
 // It never reloads by itself: a reload ends the round being counted.
 const APP_VERSION='2026.11.15c';
 const WHATS_NEW=[
-  {v:'2026.11.15c',items:['หน้าต่างลอย: มีนาฬิกาเวลาจริง 🕒 ตามโซนเวลาของเครื่องที่เปิดอยู่ ทั้งแบบเต็มและแถบเล็ก (ในแถบเล็กอยู่หน้าสุด ไม่โดนตัดตอนหน้าต่างแคบ)']},
+  {v:'2026.11.15c',items:['หน้าต่างลอย: นาฬิกาเวลาจริง 🌐 มุมซ้ายบน บอกโซนเวลาด้วย (ตามเครื่องที่เปิดอยู่) · แถบเล็กอยู่หน้าสุด']},
   {v:'2026.11.15b',items:['Meso: แก้อ่านได้เลขสั้นผิด ๆ (17, 222, 303) — แม่แบบตัวเลขที่จำผิดถูกล้างและเรียนใหม่แบบเข้มขึ้น ตอนเริ่มรอบอ่านด้วยตัวอ่านปกติเสมอ']},
   {v:'2026.11.15',items:['ป้ายเวอร์ชันบนหัวเว็บ: บอกว่าเป็นเวอร์ชันล่าสุดไหม มีของใหม่กดโหลดได้เลย',
     'EXP: อ่านเลขที่ขึ้นต้นด้วย 1 (เช่น 177,881) ได้ถูกแล้ว และจับการอัปเลเวลได้ — เดิมอ่านเป็น % แล้วคิดว่ายังเป็นเลเวลเก่า',
