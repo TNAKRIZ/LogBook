@@ -1213,7 +1213,10 @@ const OCR=(()=>{
      the glyphs of that read are stored as examples of their digits. Later reads compare each glyph with those examples —
      a shape comparison, not a guess — and are used only when every glyph matches one digit clearly. */
   let TPL=null;const TPL_MAX=6;
-  async function tplLoad(){if(!TPL){try{TPL=(await getKV('digitTpl2'))||{};}catch(e){TPL={};}}return TPL;}
+  async function tplLoad(){if(!TPL){try{TPL=(await getKV('digitTpl2'))||{};}catch(e){TPL={};}
+    // Nov 15: Meso shapes learned from wrong reads ("303" taken as the start) read 281,786 as "17" — drop them once; they are
+    // learned again under the stricter rules below. EXP shapes were fine and stay.
+    if(!TPL.mesoReset1){delete TPL.meso;TPL.mesoReset1=1;try{await put('kv',TPL,'digitTpl2');}catch(e){}}}return TPL;}
   const tplSim=(g,t)=>{let both=0,any=0;for(let i=0;i<g.b.length;i++){const p=g.b[i]==='1',q=t.b[i]==='1';if(p&&q)both++;if(p||q)any++;}
     return (any?both/any:0)-Math.min(0.3,Math.abs(g.a-t.a)*0.8);};
   // the HUD % digits, cut from Harry's real screens at several sizes (tools/build_pct_tpl.js) — a head start before this player's own
@@ -1222,9 +1225,10 @@ const OCR=(()=>{
     if(!Object.keys(T).length)return null;let best=null,s1=-1,s2=-1;
     for(const d of Object.keys(T)){let s=-1;for(const t of T[d])s=Math.max(s,tplSim(g,t));if(s>s1){s2=s1;s1=s;best=d;}else if(s>s2)s2=s;}
     return best!=null&&s1>=0.72&&s1-s2>=0.06?best:null;}
-  // every glyph must be a clear digit; for Meso a frame edge at either end of the field may be skipped
+  // every glyph must be a clear digit; for Meso a thin frame edge at either end of the field may be skipped — a digit-shaped glyph
+  // that matches nothing is never skipped (that turned "281,786" into "17")
   const tplRead=(kind,gs,trim=false)=>{if(!gs||!gs.length)return null;let ds=gs.map(g=>tplDigit(kind,g));
-    if(trim){let a=0,b=ds.length;while(a<b&&ds[a]==null&&a<2)a++;while(b>a&&ds[b-1]==null&&ds.length-b<2)b--;ds=ds.slice(a,b);}
+    if(trim){let a=0,b=ds.length;while(a<b&&ds[a]==null&&gs[a].a<0.3&&a<2)a++;while(b>a&&ds[b-1]==null&&gs[b-1].a<0.3&&ds.length-b<2)b--;ds=ds.slice(a,b);}
     return ds.length&&ds.every(d=>d!=null)?ds.join(''):null;};
   // the glyphs that are the digits of a known value: the same count, or the count after dropping a thin frame edge at an end
   function alignGlyphs(gs,n){if(!gs)return null;if(gs.length===n)return gs;const opts=[];
@@ -1234,6 +1238,8 @@ const OCR=(()=>{
   async function tplLearn(kind,gs,digits){if(!gs||gs.length!==digits.length)return;await tplLoad();const T=TPL[kind]=TPL[kind]||{};
     gs.forEach((g,i)=>{const d=digits[i];const L=T[d]=T[d]||[];if(L.some(t=>tplSim(g,t)>0.97))return;L.unshift(g);if(L.length>TPL_MAX)L.length=TPL_MAX;});
     try{await put('kv',TPL,'digitTpl2');}catch(e){}}
+  const editDist=(a,b)=>{const d=Array.from({length:a.length+1},(_,i)=>[i,...Array(b.length).fill(0)]);for(let j=1;j<=b.length;j++)d[0][j]=j;
+    for(let i=1;i<=a.length;i++)for(let j=1;j<=b.length;j++)d[i][j]=Math.min(d[i-1][j]+1,d[i][j-1]+1,d[i-1][j-1]+(a[i-1]===b[j-1]?0:1));return d[a.length][b.length];};
   const tplCount=kind=>Object.keys(TPL?.[kind]||{}).length;
   // MapleStory always shows the % with 2 decimals; dots/commas are removed before reading, so restore the dot.
   // Read the LAST number before the bracket, so stray marks from an "EXP" label in the box are ignored.
@@ -1310,7 +1316,9 @@ const OCR=(()=>{
     // template reads (no Tesseract): every glyph must match a learned digit clearly
     {const tk=kind==='exp'?'exp':'meso';if(tplCount(tk)>=3)for(const v of V.list){
       if(kind==='exp'){const n=tplRead(tk,v.gNum),p=tplRead(tk,v.gPct);if(n&&p&&p.length>=3){const pc=+(p.slice(0,-2)+'.'+p.slice(-2));if(pc<=100)res.push({v,text:`tpl: ${n} [${pc}%]`,val:fromPct({exp:+n,pct:pc}),tpl:true});}}
-      else{const m=tplRead(tk,v.gAll,true);if(m&&m.length>=1)res.push({v,text:'tpl: '+m,val:+m,tpl:true});}}
+      // Meso by templates only once a value is known, with the same number of digits and near it (Meso moves slowly): at the start of a round, or when the
+      // digit count changes, Tesseract reads it — a template read can't set the value on its own
+      else if(st.meso!=null){const m=tplRead(tk,v.gAll,true);if(m&&m.length===String(st.meso).length&&+m>=st.meso*0.5&&+m<=st.meso*2)res.push({v,text:'tpl: '+m,val:+m,tpl:true});}}
       // a clear majority of the template reads (≥2, at least twice the runner-up): one variant's odd glyph doesn't send it to Tesseract
       const t=res.filter(r=>r.tpl&&r.val!=null),cnt=t.map(r=>t.filter(o=>same(kind,o.val,r.val)).length),top=Math.max(0,...cnt),bi=cnt.indexOf(top);
       const second=Math.max(0,...t.filter(r=>bi>=0&&!same(kind,r.val,t[bi].val)).map(r=>t.filter(o=>same(kind,o.val,r.val)).length));
@@ -2163,7 +2171,8 @@ const OCR=(()=>{
       if(okE&&r.exp&&!r.exp.est&&r.expSure&&r.expLevel!=null&&r.expLevel!==(st.levelAtExp??st.level)){
         st.lvProof=st.lvProof?.L===r.expLevel?{L:r.expLevel,n:st.lvProof.n+1}:{L:r.expLevel,n:1};
         if(st.lvProof.n>=2){relevel(r.expLevel);st.lvProof=null;}}else if(okE)st.lvProof=null;
-      if(okM&&r.listMeso&&r.meso===st.meso&&st.mesoWin.length>=3&&st.mesoWin.every(x=>x===r.meso)){const dm=String(r.meso);   // 3 identical accepted reads
+      // 3 identical accepted reads, this one by Tesseract (never from a template read — that would teach its own mistakes back)
+      if(okM&&r.listMeso&&r.meso===st.meso&&!/แม่แบบ|^tpl/.test(r.rawMeso||'')&&st.mesoWin.length>=3&&st.mesoWin.every(x=>x===r.meso)){const dm=String(r.meso);
         for(const v of r.listMeso){const g=alignGlyphs(v.gAll,dm.length);if(g)tplLearn('meso',g,dm);}}
       if(regions.exp){if(okE)st.errExp=0;else st.errExp++;st.rawExp=r.rawExp;}
       if(regions.meso&&!mesoOff){if(okM)st.errMeso=0;else st.errMeso++;st.rawMeso=r.rawMeso;}
@@ -2276,7 +2285,9 @@ const OCR=(()=>{
 renderLog();render();$('ocrHint').textContent='↺ เริ่มนับใหม่แล้ว — ตัวเลขจะขึ้นอีกครั้งในไม่กี่วินาที';if(was)start();else if(stream)readOnce();}
   return {init,live,setTicker,readNow,seed,restart,rememberMap,checkBoxes,learnPct:async v=>{if(!stream||!regions.exp||v==null)return;await tplLoad();const V=variants(regions.exp);if(!V)return;const ds=String(Math.round(v*100)).padStart(3,'0');
     for(const x of V.list){if(x.pctOnly&&x.gPct&&x.pctInt!=null&&x.gPct.length===ds.length&&x.pctInt===ds.length-2)await tplLearn('pct',x.gPct,ds);}},
-  learnMeso:async v=>{if(!stream||!regions.meso||v==null)return;const r=await readNow();if(!r.listMeso)return;const dm=String(v);for(const x of r.listMeso){const g=alignGlyphs(x.gAll,dm.length);if(g)await tplLearn('meso',g,dm);}},_tpl:()=>TPL,_tplLearn:tplLearn,_levelCanvases:()=>levelCanvases(regions.who).map(c=>c.toDataURL()),_fromPct:v=>fromPct(v),_titlePrint:titlePrint,_printSim:printSim,_variants:k=>{const V=variants(regions[k]);return V?V.list.map(v=>({tag:v.tag,count:v.count,modeH:v.modeH,img:v.canvas.toDataURL()})):null;},hasRegions:()=>!!(regions.exp||regions.meso),hasAny:()=>Object.values(regions).some(Boolean),has:k=>!!regions[k],readWho,readMap,_readNow:readNow,reset:()=>{reset();render();},snapshot:()=>({expGained:st.expGained,mesoCollected:st.mesoCollected,t0:st.t0,quality:{...st.q,mesoEst:st.q.mesoEst.slice(-20),rateHr:Math.round(expRate()||0),mesoExtra:Math.round(mesoExtra()),auto:{...auto.src}}}),autoFind,autoText,setMap,_findHud:findHud,_locateMeso:()=>locateMeso(auto.hud),_mesoVisible:mesoVisible,_auto:()=>auto,_mesoExtra:mesoExtra,_seek:seekMeso,_learnAnchor:learnMesoAnchor,_mesoOff:()=>mesoOff,_setMesoOff:v=>{mesoOff=!!v;st.mesoHidden=v?Date.now():null;},_setRegion:(k,v)=>{regions[k]=v;},_live:()=>live(),msgState:()=>st.msg,setMsgOn:v=>{msgOn=!!v;if(timer){if(msgOn)msgStart();else msgStop();}},_msgScan:()=>msgScan(),_msgTick:async()=>{const t0=timer;timer=timer||1;try{await msgTick();}finally{timer=t0;}},_msgParse:msgParse,_msgFill:()=>msgFill,_msgReset:(prime)=>{msgPrev=prime?null:[];msgCache=[];st.msg={exp:0,party:0,kills:0,meso:0,items:{},log:[],mesoAtSeen:0};},_ensureW:()=>ensure(),sizeCheck,readChat,_variantsOf:r=>variants(r),_tplSim:(a,b)=>tplSim(a,b),_relevel:relevel,autofill,_learnLevel:learnLevel,_readLevelDigits:async()=>readLevelDigits(await ensure()),learnLevel,_variants:k=>variants(regions[k]),_readRegion:async k=>readRegion(await ensure(),k),_render:()=>render(),stop,drawBoxes,_parseExp:parseExp,_parseMeso:parseMeso,_st:st,_accExp:acceptExp,_reqNow:reqNow,_accMeso:acceptMeso,_repairExp:v=>repairExp(v),_fitLevels:fitLevels,_setHint:h=>{levelHint=h;},_misses:()=>misses,_keepMiss:keepMiss};
+  // the value the player typed teaches the shapes only when Tesseract reads nearly the same number right now — at most two digits
+  // lost or changed, as with tiny digits; a typo or a box that shows something else would map the wrong digits to these glyphs
+  learnMeso:async v=>{if(!stream||!regions.meso||v==null)return;const r=await readNow();if(!r.listMeso||r.meso==null||/แม่แบบ|^tpl/.test(r.rawMeso||'')||editDist(String(r.meso),String(v))>2)return;const dm=String(v);for(const x of r.listMeso){const g=alignGlyphs(x.gAll,dm.length);if(g)await tplLearn('meso',g,dm);}},_tpl:()=>TPL,_tplLearn:tplLearn,_levelCanvases:()=>levelCanvases(regions.who).map(c=>c.toDataURL()),_fromPct:v=>fromPct(v),_titlePrint:titlePrint,_printSim:printSim,_variants:k=>{const V=variants(regions[k]);return V?V.list.map(v=>({tag:v.tag,count:v.count,modeH:v.modeH,img:v.canvas.toDataURL()})):null;},hasRegions:()=>!!(regions.exp||regions.meso),hasAny:()=>Object.values(regions).some(Boolean),has:k=>!!regions[k],readWho,readMap,_readNow:readNow,reset:()=>{reset();render();},snapshot:()=>({expGained:st.expGained,mesoCollected:st.mesoCollected,t0:st.t0,quality:{...st.q,mesoEst:st.q.mesoEst.slice(-20),rateHr:Math.round(expRate()||0),mesoExtra:Math.round(mesoExtra()),auto:{...auto.src}}}),autoFind,autoText,setMap,_findHud:findHud,_locateMeso:()=>locateMeso(auto.hud),_mesoVisible:mesoVisible,_auto:()=>auto,_mesoExtra:mesoExtra,_seek:seekMeso,_learnAnchor:learnMesoAnchor,_mesoOff:()=>mesoOff,_setMesoOff:v=>{mesoOff=!!v;st.mesoHidden=v?Date.now():null;},_setRegion:(k,v)=>{regions[k]=v;},_live:()=>live(),msgState:()=>st.msg,setMsgOn:v=>{msgOn=!!v;if(timer){if(msgOn)msgStart();else msgStop();}},_msgScan:()=>msgScan(),_msgTick:async()=>{const t0=timer;timer=timer||1;try{await msgTick();}finally{timer=t0;}},_msgParse:msgParse,_msgFill:()=>msgFill,_msgReset:(prime)=>{msgPrev=prime?null:[];msgCache=[];st.msg={exp:0,party:0,kills:0,meso:0,items:{},log:[],mesoAtSeen:0};},_ensureW:()=>ensure(),sizeCheck,readChat,_variantsOf:r=>variants(r),_tplSim:(a,b)=>tplSim(a,b),_relevel:relevel,autofill,_learnLevel:learnLevel,_readLevelDigits:async()=>readLevelDigits(await ensure()),learnLevel,_variants:k=>variants(regions[k]),_readRegion:async k=>readRegion(await ensure(),k),_render:()=>render(),stop,drawBoxes,_parseExp:parseExp,_parseMeso:parseMeso,_st:st,_accExp:acceptExp,_reqNow:reqNow,_accMeso:acceptMeso,_repairExp:v=>repairExp(v),_fitLevels:fitLevels,_setHint:h=>{levelHint=h;},_misses:()=>misses,_keepMiss:keepMiss};
 })();
 
 // two taps within 3 s → start counting again from what is on screen now (regions are kept)
@@ -3079,8 +3090,9 @@ $('themeBtn').onclick=cycleTheme;applyTheme(getTheme());
 // release — tests/version-bump.js fails when index.html changed but the version didn't.
 // The check asks GitHub Pages for this same page (no cache) and compares the version written in it; nothing is sent.
 // It never reloads by itself: a reload ends the round being counted.
-const APP_VERSION='2026.11.15';
+const APP_VERSION='2026.11.15b';
 const WHATS_NEW=[
+  {v:'2026.11.15b',items:['Meso: แก้อ่านได้เลขสั้นผิด ๆ (17, 222, 303) — แม่แบบตัวเลขที่จำผิดถูกล้างและเรียนใหม่แบบเข้มขึ้น ตอนเริ่มรอบอ่านด้วยตัวอ่านปกติเสมอ']},
   {v:'2026.11.15',items:['ป้ายเวอร์ชันบนหัวเว็บ: บอกว่าเป็นเวอร์ชันล่าสุดไหม มีของใหม่กดโหลดได้เลย',
     'EXP: อ่านเลขที่ขึ้นต้นด้วย 1 (เช่น 177,881) ได้ถูกแล้ว และจับการอัปเลเวลได้ — เดิมอ่านเป็น % แล้วคิดว่ายังเป็นเลเวลเก่า',
     'EXP: ถ้าจอยังโชว์ตัวเลข จะไม่เชื่อ % ที่อ่านเพี้ยนจนเกินล้านอีก',

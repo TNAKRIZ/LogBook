@@ -7,8 +7,9 @@ const ok=(c,l,g)=>{total++;if(c)pass++;else console.log('  ✗',l,JSON.stringify
 async function page(live){   // live: version the "server" now has, or null = the check fails
   const ctx=await b.newContext();const p=await ctx.newPage();const errs=[];p.on('pageerror',e=>errs.push(e.message));
   await p.route('**/index.html',async r=>{if(r.request().resourceType()!=='fetch')return r.continue();
-    if(live===null)return r.abort();const res=await r.fetch();const t=(await res.text()).replace(/const APP_VERSION='[^']+'/,`const APP_VERSION='${live}'`);
-    r.fulfill({response:res,body:t});});
+    if(live===null)return r.abort();
+    try{const res=await r.fetch();const t=(await res.text()).replace(/const APP_VERSION='[^']+'/,`const APP_VERSION='${live}'`);await r.fulfill({response:res,body:t});}
+    catch(e){/* the page reloaded while this check was in flight (the "click reloads" case) — nothing to answer */}});
   await p.goto(BASE+'/index.html');await p.waitForTimeout(900);return {p,ctx,errs};}
 const cur=await (async()=>{const {p,ctx}=await page(null);const v=await p.evaluate(()=>APP_VERSION);await ctx.close();return v;})();
 const chip=p=>p.$eval('#vChip',e=>({t:e.textContent,nw:e.classList.contains('new')}));

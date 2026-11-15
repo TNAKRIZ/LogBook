@@ -13,6 +13,7 @@ async function page(b,img,k,box,kind){const ctx=await b.newContext();await ctx.a
  {const p=await page(b,'fixtures/real-meso-1376646.png',0.6,[168,236,92,26],'meso');
   const before=await p.evaluate(()=>OCR._readNow().then(r=>r.meso));
   await p.evaluate(()=>OCR.learnMeso(1376646));
+  await p.evaluate(()=>{OCR._st.meso=1376646;});   // the confirmed start value is the tracker's value (templates never set the value alone)
   const after=await p.evaluate(()=>OCR._readNow().then(r=>({v:r.meso,raw:r.rawMeso})));
   const ok=after.v===1376646;total++;pass+=ok;console.log(ok?'✓':'✗','meso ×0.6 before',before,'after learning',JSON.stringify(after),p.errs.join(';'));}
  // EXP: a proven read teaches the templates; the next reads use them
